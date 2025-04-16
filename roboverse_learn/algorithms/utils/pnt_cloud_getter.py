@@ -143,7 +143,7 @@ class PntCloudGetter:
 
             if not use_RGB:
                 point_cloud = point_cloud[:, :3]
-            return point_cloud
+            return torch.from_numpy(point_cloud).to(rgb.device).float()
 
         elif len(rgb.shape) == 4:  # [N_env,C,H,W]
             N_env = rgb.shape[0]

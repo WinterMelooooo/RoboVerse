@@ -27,7 +27,7 @@ from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors.cameras import PinholeCameraCfg
 from metasim.constants import SimType
 from metasim.utils.demo_util import get_traj
-from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
+from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task, get_wrapper_class
 from roboverse_learn.algorithms import PolicyRunner, get_runner
 
 
@@ -67,6 +67,8 @@ class Args:
     """Maximum number of steps to collect"""
     gpu_id: int = 0
     """GPU ID to use"""
+    wrapper_class: str | None = None
+    """Env wrapper to use"""
 
     def __post_init__(self):
         if self.random.table and not self.table:
@@ -99,6 +101,9 @@ def main():
     tic = time.time()
     env_class = get_sim_env_class(SimType(scenario.sim))
     env = env_class(scenario)
+    if args.wrapper_class is not None:
+        wrapper_class = get_wrapper_class(args.wrapper_class)
+        env = wrapper_class(env, args.task)
     toc = time.time()
     log.trace(f"Time to launch: {toc - tic:.2f}s")
 

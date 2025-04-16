@@ -192,6 +192,23 @@ def get_sim_env_class(sim: SimType):
         raise ValueError(f"Invalid simulator type: {sim}")
 
 
+def get_wrapper_class(wrapper_name: str) -> gym.Wrapper:
+    """Get the wrapper class from the wrapper name."""
+    if wrapper_name == "pnt_cloud_wrapper":
+        try:
+            import sys
+
+            sys.path.append(".")
+            from roboverse_learn.algorithms.utils.pnt_cloud_wrapper import IsaaclabPointcloudWrapperDP
+
+            return IsaaclabPointcloudWrapperDP
+        except ImportError as e:
+            log.error(f"IsaaclabPointcloudWrapperDP not found, check sys path:{sys.path}")
+            raise e
+    else:
+        raise NotImplementedError(f"Wrapper {wrapper_name} not implemented")
+
+
 def get_task(task_id: str) -> BaseTaskCfg:
     """Get the task cfg instance from the task id.
 
