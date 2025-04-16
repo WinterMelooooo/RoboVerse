@@ -163,7 +163,12 @@ def main():
                     for env in obs
                 ]),
             }
-
+            if (
+                "head_cam" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+                and policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+            ):
+                new_obs["depth"] = torch.stack([env["cameras"]["camera0"]["depth"] for env in obs])
+                assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
             images_list.append(np.array(new_obs["rgb"].cpu()))
             action = policyRunner.get_action(new_obs)
 

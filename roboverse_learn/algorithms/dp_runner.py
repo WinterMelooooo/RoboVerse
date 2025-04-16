@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import deque
 
 import dill
@@ -5,10 +7,16 @@ import hydra
 import numpy as np
 import torch
 from diffusion_policy import RobotWorkspace
+from diffusion_policy.common.pytorch_util import dict_apply
 
 from metasim.cfg.policy import DiffusionPolicyCfg
 
 from .base_runner import PolicyRunner
+
+try:
+    from metasim.types import EnvState
+except:
+    pass
 
 
 class DPRunner(PolicyRunner):
@@ -97,3 +105,26 @@ class DPRunner(PolicyRunner):
             action_chunk = self.policy.predict_action(obs)["action"].detach().to(torch.float32)
             action_chunk = action_chunk.transpose(0, 1)
         return action_chunk
+
+    def process_obs(self, obs: list[EnvState]):
+        """
+        Args:
+            obs: dict{key: (N_env, value)}
+        """
+        obs = dict_apply(obs, lambda x: x.to(device=self.device) if isinstance(x, torch.Tensor) else x)
+        obs_dict = super().process_obs(obs)
+        if (
+            "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()
+            and self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+        ):
+            if self.policy_cfg.obs_config.norm_image:
+                depth = obs["depth"].permute(0, 3, 1, 2) / 255.0
+            else:
+                depth = obs["depth"].permute(0, 3, 1, 2)
+            assert depth.shape[1] == 1, f"depth should be 1 channel, but got {depth.shape}"
+            obs_dict["head_cam"] = torch.cat([obs_dict["head_cam"], depth], dim=1)
+            assert obs_dict["head_cam"].shape[1] == 4, (
+                f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
+            )
+
+        return obs_dict

@@ -1,1 +1,1 @@
-python roboverse_learn/eval.py --task CloseBox --algo diffusion_policy --num_envs 50 --wrapper_class pnt_cloud_wrapper --checkpoint_path /home/yktang/Repos/RoboVerse_dev/info/outputs/2025.04.15/05.55.33_CloseBox_franka_level0_100_obs:ee_act:ee/checkpoints/200.ckpt
+python roboverse_learn/eval.py --task CloseBox --algo diffusion_policy --num_envs 50 --checkpoint_path /home/yktang/Repos/RoboVerse/info/outputs/DP/2025.04.17/00.15.57_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt
