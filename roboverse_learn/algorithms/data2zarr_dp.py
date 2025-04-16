@@ -67,8 +67,13 @@ def main():
         help="If > 0, pad joint positions to this length when using joint_pos observation/action space",
     )
 
+    parser.add_argument("--store_rgbd", type=int, choices=[0, 1], default=0)
+
+    parser.add_argument("--store_pnt_cloud", type=int, choices=[0, 1], default=0)
+
     args = parser.parse_args()
 
+    args.store_rgbd = args.store_rgbd or args.store_pnt_cloud
     task_name = args.task_name
     num = args.expert_data_num
     load_dir = args.metadata_dir
@@ -97,6 +102,13 @@ def main():
     total_count = 0
     current_batch = 0
     # current_demo_index = 0
+    if args.store_rgbd:
+        head_camera_depth_arrays = []
+    if args.store_pnt_cloud:
+        from utils.pnt_cloud_getter import PntCloudGetter
+
+        head_camera_pnt_cloud_arrays = []
+        pnt_cloud_getter = PntCloudGetter(args.task_name.split("_")[0], use_point_crop=True)
 
     if args.joint_pos_padding > 0 and args.observation_space == "ee" and args.action_space == "ee":
         logging.warning("Padding is not supported for ee observation and action spaces.")
@@ -119,6 +131,8 @@ def main():
             metadata = json.load(f)
         data_length = len(metadata["joint_qpos"])
         rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"))
+        if args.store_rgbd:
+            depths = iio.mimread(os.path.join(demo_dir, "depth_uint8.mp4"))
         for i, rgb in enumerate(rgbs):
             if i % downsample_ratio != 0:
                 continue
@@ -200,6 +214,23 @@ def main():
             head_camera_arrays.append(rgb)
             state_arrays.append(state)
             action_arrays.append(action)
+            if args.store_rgbd:
+                depth = depths[i]
+                head_camera_depth_arrays.append(depth)  # (256,256,3) [0,255]
+
+            if args.store_pnt_cloud:
+                depth = depths[i][:, :, 0] / 255.0  # (256,256) [0,1]
+                # print(max(depth.flatten()), min(depth.flatten()), depth.shape, type(depth[0, 0]))
+                cam_intr = np.array(metadata["cam_intr"][i])
+                cam_extr = np.array(metadata["cam_extr"][i])
+                depth_min = metadata["depth_min"][i]
+                depth_max = metadata["depth_max"][i]
+                # depth_meter = depth_min / (1 - depth * (1 - depth_min / depth_max)) # Use this for mujoco
+                depth_meter = depth_min + (depth.astype(np.float32)) * (depth_max - depth_min)
+                pnt_cloud = pnt_cloud_getter.get_point_cloud(
+                    rgb, np.ascontiguousarray(depth_meter).astype(np.float32), cam_intr, cam_extr
+                )
+                head_camera_pnt_cloud_arrays.append(pnt_cloud)  # (N, 6) [x,y,z,r,g,b]
             total_count += 1
 
         episode_ends_arrays.append(total_count)
@@ -209,6 +240,11 @@ def main():
             # Convert arrays to NumPy and format head_camera
             head_camera_arrays = np.array(head_camera_arrays)
             head_camera_arrays = np.moveaxis(head_camera_arrays, -1, 1)  # NHWC -> NCHW
+            if args.store_rgbd:
+                head_camera_depth_arrays = np.array(head_camera_depth_arrays)
+                head_camera_depth_arrays = np.moveaxis(head_camera_depth_arrays, -1, 1)  # NHWC -> NCHW
+            if args.store_pnt_cloud:
+                head_camera_pnt_cloud_arrays = np.array(head_camera_pnt_cloud_arrays)
             # print(head_camera_arrays)
             action_arrays = np.array(action_arrays)
             state_arrays = np.array(state_arrays)
@@ -240,6 +276,24 @@ def main():
                     compressor=compressor,
                     overwrite=True,
                 )
+                if args.store_rgbd:
+                    zarr_data.create_dataset(
+                        "head_camera_depth",
+                        shape=(0, *head_camera_depth_arrays.shape[1:]),
+                        chunks=(batch_size, *head_camera_depth_arrays.shape[1:]),
+                        dtype=head_camera_depth_arrays.dtype,
+                        compressor=compressor,
+                        overwrite=True,
+                    )
+                if args.store_pnt_cloud:
+                    zarr_data.create_dataset(
+                        "head_camera_pnt_cloud",
+                        shape=(0, *head_camera_pnt_cloud_arrays.shape[1:]),
+                        chunks=(batch_size, *head_camera_pnt_cloud_arrays.shape[1:]),
+                        dtype=head_camera_pnt_cloud_arrays.dtype,
+                        compressor=compressor,
+                        overwrite=True,
+                    )
                 zarr_meta.create_dataset(
                     "episode_ends",
                     shape=(0,),
@@ -254,6 +308,10 @@ def main():
             zarr_data["state"].append(state_arrays)
             zarr_data["action"].append(action_arrays)
             zarr_meta["episode_ends"].append(episode_ends_arrays)
+            if args.store_rgbd:
+                zarr_data["head_camera_depth"].append(head_camera_depth_arrays)
+            if args.store_pnt_cloud:
+                zarr_data["head_camera_pnt_cloud"].append(head_camera_pnt_cloud_arrays)
 
             print(f"Batch {current_batch + 1} written with {len(head_camera_arrays)} samples.")
 
