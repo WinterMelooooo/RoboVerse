@@ -14,6 +14,8 @@ num_epochs=${5}
 obs_space=${6} # joint_pos or ee
 act_space=${7} # joint_pos or ee
 delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 means delta control )
+store_rgbd=${9:-0} # 0 or 1
+store_pnt_cloud=${10:-0} # 0 or 1
 
 config_name=robot_dp
 horizon=8
@@ -33,20 +35,22 @@ python roboverse_learn/algorithms/data2zarr_dp.py \
 --metadata_dir ${metadata_dir} \
 --action_space ${act_space} \
 --observation_space ${obs_space} \
---delta_ee ${delta_ee}
+--delta_ee ${delta_ee} \
+--store_rgbd ${store_rgbd} \
+--store_pnt_cloud ${store_pnt_cloud}
 
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_id}
-python roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
---task.name=${task_name}_${extra} \
---task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
---training.seed=${seed} \
---horizon=${horizon} \
---n_obs_steps=${n_obs_steps} \
---n_action_steps=${n_action_steps} \
---training.num_epochs=${num_epochs} \
---policy_runner.obs.obs_type=${obs_space} \
---policy_runner.action.action_type=${act_space} \
---policy_runner.action.delta=${delta_ee} \
---training.device="cuda:${gpu_id}"
+#python roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
+#--task.name=${task_name}_${extra} \
+#--task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
+#--training.seed=${seed} \
+#--horizon=${horizon} \
+#--n_obs_steps=${n_obs_steps} \
+#--n_action_steps=${n_action_steps} \
+#--training.num_epochs=${num_epochs} \
+#--policy_runner.obs.obs_type=${obs_space} \
+#--policy_runner.action.action_type=${act_space} \
+#--policy_runner.action.delta=${delta_ee} \
+#--training.device="cuda:${gpu_id}"

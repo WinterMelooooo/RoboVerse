@@ -16,6 +16,20 @@ except ImportError:
     pass
 
 
+# TODO:REMOVE THIS
+temp_dict = {
+    "cam_pos": [1.5, 0.0, 1.5],
+    "cam_look_at": [0.0, 0.0, 0.0],
+    "cam_intr": [[293.19970703125, 0.0, 128.0], [0.0, 293.19970703125, 128.0], [0.0, 0.0, 1.0]],
+    "cam_extr": [
+        [0.0, 1.0, -0.0, -0.0],
+        [0.7071067690849304, -0.0, -0.7071067690849304, -0.0],
+        [-0.7071068286895752, 0.0, -0.7071068286895752, 2.1213204860687256],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
+}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Process Meta Data To ZARR For Diffusion Policy.")
     parser.add_argument(
@@ -225,6 +239,8 @@ def main():
                 cam_extr = np.array(metadata["cam_extr"][i])
                 depth_min = metadata["depth_min"][i]
                 depth_max = metadata["depth_max"][i]
+                cam_intr = np.array(temp_dict["cam_intr"]) if not cam_intr.size else cam_intr
+                cam_extr = np.array(temp_dict["cam_extr"]) if not cam_extr.size else cam_extr
                 # depth_meter = depth_min / (1 - depth * (1 - depth_min / depth_max)) # Use this for mujoco
                 depth_meter = depth_min + (depth.astype(np.float32)) * (depth_max - depth_min)
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(

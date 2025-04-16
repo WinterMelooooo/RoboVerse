@@ -77,10 +77,7 @@ class PntCloudGetter:
             raise NotImplementedError(
                 "The point cloud getter relies on bounding box, whose x,y boundaries will translate as num_envs change. You can either set your num_envs to one of [1,25,50], or you can verify the specific offset for your num_envs by setting DEBUG=True in pnt_cloud_getter.py and run eval.py"
             )
-        if task_name not in ENV_POINT_CLOUD_CONFIG.keys():
-            raise NotImplementedError(
-                f"task_name {task_name} not in ENV_POINT_CLOUD_CONFIG, only support: {ENV_POINT_CLOUD_CONFIG.keys()}"
-            )
+        task_name = self._get_task_name(task_name)
         # point cloud cropping
         self.min_bound = ENV_POINT_CLOUD_CONFIG[task_name].get("min_bound", None)
         self.max_bound = ENV_POINT_CLOUD_CONFIG[task_name].get("max_bound", None)
@@ -162,3 +159,14 @@ class PntCloudGetter:
                 pointcloud_batch.append(point_cloud)
             pointcloud_batch = np.stack(pointcloud_batch, axis=0)
             return pointcloud_batch
+
+    def _get_task_name(self, task_name):
+        """
+        get task name from env_name
+        """
+        for key in ENV_POINT_CLOUD_CONFIG.keys():
+            if key in task_name:
+                return key
+        raise NotImplementedError(
+            f"task_name {task_name} not in ENV_POINT_CLOUD_CONFIG, only support: {ENV_POINT_CLOUD_CONFIG.keys()}"
+        )
