@@ -17,7 +17,7 @@ delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 m
 store_rgbd=${9:-0} # 0 or 1
 store_pnt_cloud=${10:-0} # 0 or 1
 
-config_name=robot_dp
+config_name=robot_dp_rgbd
 horizon=8
 n_obs_steps=3
 n_action_steps=4

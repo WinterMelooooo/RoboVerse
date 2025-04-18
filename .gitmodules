@@ -1,3 +1,7 @@
 [submodule "third_party/curobo"]
 	path = third_party/curobo
 	url = git@github.com:RoboVerseOrg/curobo.git
+
+[submodule "third_party/DFormer"]
+	path = third_party/DFormer
+	url = git@github.com:VCIP-RGBD/DFormer.git

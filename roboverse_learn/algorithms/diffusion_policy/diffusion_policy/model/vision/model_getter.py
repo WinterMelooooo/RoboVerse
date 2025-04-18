@@ -45,11 +45,11 @@ def get_dformer(name, **kwargs):
             modal_x: (B, 3, H, W) tensor, representing depth image in BGR format
     """
     import sys
-    sys.path.append("third_party/DFormer")
+    sys.path.append("./third_party/DFormer")
     import torch.nn as nn
     from importlib import import_module
     from collections import namedtuple
-    from third_party.DFormer.models.builder import EncoderDecoder as segmodel
+    from models.builder import EncoderDecoder as segmodel
     from .rgbd_encoder import DFormerFeatureExtractor
     Args = namedtuple("Args", ["syncbn", "compile", "continue_fpath", "sliding"])
     args = Args(syncbn=True, compile=False, sliding = False, continue_fpath="checkpoints/trained/NYUv2_DFormer_Base.pth")
@@ -65,13 +65,13 @@ def get_dformer(name, **kwargs):
         norm_layer=BatchNorm2d,
         syncbn=args.syncbn,
     )
-
     weight = torch.load(args.continue_fpath, map_location=torch.device("cpu"))
+    print(f"Loading weights from {args.continue_fpath}")
     if "model" in weight:
         weight = weight["model"]
     elif "state_dict" in weight:
         weight = weight["state_dict"]
     print(model.load_state_dict(weight, strict=False))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     model.to(device)
     return DFormerFeatureExtractor(model.backbone)

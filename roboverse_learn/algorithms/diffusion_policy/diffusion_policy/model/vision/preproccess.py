@@ -24,7 +24,6 @@ class Preprocessor(object):
         modal_x = modal_x.repeat(1, 3, 1, 1) # [B, 3, H, W] [-1, 1]
         modal_x = (modal_x + 1) / 2.0 # [B, 3, H, W] [0, 1]
 
-
         device = nrgb.device
         self.norm_mean = self.norm_mean.to(device)
         self.norm_std = self.norm_std.to(device)

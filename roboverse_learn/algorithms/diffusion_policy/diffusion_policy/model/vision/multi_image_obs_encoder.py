@@ -178,10 +178,11 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                     assert batch_size == img.shape[0]
                 assert img.shape[1:] == self.key_shape_map[key]
                 if hasattr(self, "preprocessor"):
-                    img = self.preprocessor(img)
+                    img, depth = self.preprocessor(img)
+                    feature = self.key_model_map[key](img, depth)
                 else:
                     img = self.key_transform_map[key](img)
-                feature = self.key_model_map[key](img)
+                    feature = self.key_model_map[key](img)
                 features.append(feature)
 
         # process lowdim input

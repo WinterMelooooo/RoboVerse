@@ -1,12 +1,9 @@
 import torch
 import torch.nn as nn
-try:
-    from third_party.DFormer.models.encoders.DFormer import DFormer
-except:
-    pass
+
 
 class DFormerFeatureExtractor(nn.Module):
-    def __init__(self, dformer: DFormer):
+    def __init__(self, dformer):
         super().__init__()
         self.backbone = dformer
         self.global_pool = nn.AdaptiveAvgPool2d((1,1))
