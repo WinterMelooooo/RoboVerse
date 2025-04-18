@@ -125,64 +125,9 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                         this_model = copy.deepcopy(rgb_model)
 
                 if this_model is not None:
-                    # Change the first conv layer to accept 4 channels (RGBD)
-                    original_conv = this_model.conv1
-                    this_model.conv1 = nn.Conv2d(4, original_conv.out_channels, kernel_size=original_conv.kernel_size,
-                                                stride=original_conv.stride, padding=original_conv.padding, bias=original_conv.bias is not None)
-                    with torch.no_grad():
-                        old_weights = original_conv.weight  # shape: [out_channels, 3, kernel_h, kernel_w]
-                        new_channel = old_weights.mean(dim=1, keepdim=True) # shape: [out_channels, 1, kernel_h, kernel_w]
-                        new_weights = torch.cat([old_weights, new_channel], dim=1) # shape: [out_channels, 4, kernel_h, kernel_w]
-                        this_model.conv1.weight.copy_(new_weights)
-
-                    if use_group_norm:
-                        this_model = replace_submodules(
-                            root_module=this_model,
-                            predicate=lambda x: isinstance(x, nn.BatchNorm2d),
-                            func=lambda x: nn.GroupNorm(
-                                num_groups=x.num_features // 16,
-                                num_channels=x.num_features,
-                            ),
-                        )
                     key_model_map[key] = this_model
-
-                # configure resize
-                input_shape = shape
-                this_resizer = nn.Identity()
-                if resize_shape is not None:
-                    if isinstance(resize_shape, dict):
-                        h, w = resize_shape[key]
-                    else:
-                        h, w = resize_shape
-                    this_resizer = torchvision.transforms.Resize(size=(h, w))
-                    input_shape = (shape[0], h, w)
-
-                # configure randomizer
-                this_randomizer = nn.Identity()
-                if crop_shape is not None:
-                    if isinstance(crop_shape, dict):
-                        h, w = crop_shape[key]
-                    else:
-                        h, w = crop_shape
-                    if random_crop:
-                        this_randomizer = CropRandomizer(
-                            input_shape=input_shape,
-                            crop_height=h,
-                            crop_width=w,
-                            num_crops=1,
-                            pos_enc=False,
-                        )
-                    else:
-                        this_normalizer = torchvision.transforms.CenterCrop(size=(h, w))
-                # configure normalizer
-                this_normalizer = nn.Identity()
-                if imagenet_norm:
-                    this_normalizer = torchvision.transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406, 0.445], std=[0.229, 0.224, 0.225, 0.269] # Using the grayscale params for normalizing the depth channel. Not sure if it works. Source of params:https://stackoverflow.com/questions/58151507/why-pytorch-officially-use-mean-0-485-0-456-0-406-and-std-0-229-0-224-0-2?newreg=8195664668384eddb34c3dd668879f7c
-                    )
-
-                this_transform = nn.Sequential(this_resizer, this_randomizer, this_normalizer)
-                key_transform_map[key] = this_transform
+                from .preproccess import Preprocessor
+                self.preprocessor = Preprocessor(norm_mean=[0.485, 0.456, 0.406], norm_std=[0.229, 0.224, 0.225])
             else:
                 raise RuntimeError(f"Unsupported obs type: {type}")
         rgb_keys = sorted(rgb_keys)
@@ -232,7 +177,10 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 else:
                     assert batch_size == img.shape[0]
                 assert img.shape[1:] == self.key_shape_map[key]
-                img = self.key_transform_map[key](img)
+                if hasattr(self, "preprocessor"):
+                    img = self.preprocessor(img)
+                else:
+                    img = self.key_transform_map[key](img)
                 feature = self.key_model_map[key](img)
                 features.append(feature)
 
