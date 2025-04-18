@@ -49,8 +49,8 @@ policy:
     _target_: diffusion_policy.model.vision.multi_image_obs_encoder.MultiImageObsEncoder
     shape_meta: ${shape_meta}
     rgb_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_resnet
-      name: resnet18
+      _target_: diffusion_policy.model.vision.model_getter.get_dformer
+      name: DFormer_Base
       weights: null
     resize_shape: null
     crop_shape: null
