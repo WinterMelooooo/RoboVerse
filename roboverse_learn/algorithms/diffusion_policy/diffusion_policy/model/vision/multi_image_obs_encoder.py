@@ -127,7 +127,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 if this_model is not None:
                     key_model_map[key] = this_model
                 from .preproccess import Preprocessor
-                self.preprocessor = Preprocessor(norm_mean=[0.485, 0.456, 0.406], norm_std=[0.229, 0.224, 0.225])
+                self.preprocessor = Preprocessor(norm_mean=[0.485, 0.456, 0.406], norm_std=[0.229, 0.224, 0.225], device = this_model.device)
             else:
                 raise RuntimeError(f"Unsupported obs type: {type}")
         rgb_keys = sorted(rgb_keys)

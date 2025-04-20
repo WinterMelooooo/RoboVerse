@@ -80,7 +80,6 @@ class BaseWorkspace:
             exclude_keys = tuple()
         if include_keys is None:
             include_keys = payload["pickles"].keys()
-
         for key, value in payload["state_dicts"].items():
             if key not in exclude_keys:
                 self.__dict__[key].load_state_dict(value, **kwargs)
@@ -88,7 +87,9 @@ class BaseWorkspace:
             if key in payload["pickles"]:
                 self.__dict__[key] = dill.loads(payload["pickles"][key])
 
-    def load_checkpoint(self, path=None, tag="latest", exclude_keys=None, include_keys=None, **kwargs):
+    def load_checkpoint(
+        self, path=None, tag="latest", exclude_keys=None, include_keys=None, **kwargs
+    ):
         if path is None:
             path = self.get_checkpoint_path(tag=tag)
         else:
@@ -98,7 +99,9 @@ class BaseWorkspace:
         return payload
 
     @classmethod
-    def create_from_checkpoint(cls, path, exclude_keys=None, include_keys=None, **kwargs):
+    def create_from_checkpoint(
+        cls, path, exclude_keys=None, include_keys=None, **kwargs
+    ):
         payload = torch.load(open(path, "rb"), pickle_module=dill)
         instance = cls(payload["cfg"])
         instance.load_payload(

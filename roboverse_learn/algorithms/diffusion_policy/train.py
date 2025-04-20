@@ -15,6 +15,10 @@ rootutils.setup_root(__file__, pythonpath=True)
 
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
 OmegaConf.register_new_resolver("eval", eval, replace=True)
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+import os
+import torch
 
 
 abs_config_path = str(pathlib.Path(__file__).resolve().parent.joinpath("diffusion_policy", "config").absolute())
@@ -29,7 +33,13 @@ def main(cfg: OmegaConf):
 
     cls = hydra.utils.get_class(cfg._target_)
 
-    workspace: BaseWorkspace = cls(cfg)
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group(backend="Gloo")
+
+
+    workspace: BaseWorkspace = cls(cfg, local_rank=local_rank, world_size=world_size)
     workspace.run()
 
 

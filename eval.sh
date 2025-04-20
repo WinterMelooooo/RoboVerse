@@ -1,1 +1,2 @@
-python roboverse_learn/eval.py --task CloseBox --algo diffusion_policy --num_envs 50 --checkpoint_path /home/yktang/Repos/RoboVerse/info/outputs/DP/2025.04.17/00.15.57_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt
+export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
+python roboverse_learn/eval.py --task CloseBox --algo diffusion_policy --num_envs 100 --headless --checkpoint_path /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/04.53.50_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt

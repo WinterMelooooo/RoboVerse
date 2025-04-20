@@ -2,12 +2,13 @@ import torch
 
 
 class Preprocessor(object):
-    def __init__(self, norm_mean, norm_std, sign=False, config=None):
+    def __init__(self, norm_mean, norm_std, sign=False, config=None, device=None):
         self.config = config
         self.norm_mean = torch.tensor(norm_mean).view(1,3,1,1)
         self.norm_std = torch.tensor(norm_std).view(1,3,1,1)
         self.sign = sign
-
+        self.device = device
+        
     def __call__(self, rgbd):
         """
         Args:
@@ -29,4 +30,7 @@ class Preprocessor(object):
         self.norm_std = self.norm_std.to(device)
         rgb = (nrgb - self.norm_mean) / self.norm_std
         modal_x = (modal_x - 0.48) / 0.28
+        if self.device:
+            rgb = rgb.to(self.device)
+            modal_x = modal_x.to(self.device)
         return rgb, modal_x

@@ -46,15 +46,18 @@ def get_dformer(name, **kwargs):
     """
     import sys
     sys.path.append("./third_party/DFormer")
+    import os
     import torch.nn as nn
     from importlib import import_module
     from collections import namedtuple
     from models.builder import EncoderDecoder as segmodel
     from .rgbd_encoder import DFormerFeatureExtractor
     Args = namedtuple("Args", ["syncbn", "compile", "continue_fpath", "sliding"])
-    args = Args(syncbn=True, compile=False, sliding = False, continue_fpath="checkpoints/trained/NYUv2_DFormer_Base.pth")
-
-    cfg_path = "local_configs.NYUDepthv2." + name
+    ckpt_path = "checkpoints/trained/NYUv2_" + name + ".pth" if not "v2" in name else "checkpoints/trained/" + name + "_NYU.pth"
+    args = Args(syncbn=True, compile=False, sliding = False, continue_fpath=ckpt_path)
+    cfg_path = "local_configs.NYUDepthv2." + name if not "v2" in name else "local_configs.NYUDepthv2." + name[:11]
+    print(f"Loading ckpt_path: {ckpt_path}")
+    print(f"Loading cfg_path: {cfg_path}")
     config = getattr(import_module(cfg_path), "C")
     criterion = nn.CrossEntropyLoss(reduction="mean", ignore_index=config.background)
     BatchNorm2d = nn.SyncBatchNorm if args.syncbn else nn.BatchNorm2d
@@ -72,6 +75,6 @@ def get_dformer(name, **kwargs):
     elif "state_dict" in weight:
         weight = weight["state_dict"]
     print(model.load_state_dict(weight, strict=False))
-    device = torch.device("cpu")
+    device = torch.device("cpu") if not args.syncbn else torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
     model.to(device)
-    return DFormerFeatureExtractor(model.backbone)
+    return DFormerFeatureExtractor(model.backbone, device=device)
