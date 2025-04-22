@@ -8,7 +8,7 @@ class Preprocessor(object):
         self.norm_std = torch.tensor(norm_std).view(1,3,1,1)
         self.sign = sign
         self.device = device
-        
+
     def __call__(self, rgbd):
         """
         Args:

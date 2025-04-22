@@ -75,6 +75,12 @@ def get_dformer(name, **kwargs):
     elif "state_dict" in weight:
         weight = weight["state_dict"]
     print(model.load_state_dict(weight, strict=False))
-    device = torch.device("cpu") if not args.syncbn else torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
+    if not args.syncbn:
+        device = torch.device("cpu")  
+    else:
+        try:
+            device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
+        except:
+            device = torch.device("cuda")
     model.to(device)
     return DFormerFeatureExtractor(model.backbone, device=device)

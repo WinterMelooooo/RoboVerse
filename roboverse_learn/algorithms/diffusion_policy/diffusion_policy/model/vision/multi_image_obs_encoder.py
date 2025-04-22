@@ -4,6 +4,7 @@ from typing import Dict, Tuple, Union
 import torch
 import torch.nn as nn
 import torchvision
+import os
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
@@ -144,6 +145,10 @@ class MultiImageObsEncoder(ModuleAttrMixin):
     def forward(self, obs_dict):
         batch_size = None
         features = list()
+        try:
+            device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
+        except Exception as e:
+            device = torch.device("cuda")
         # process rgb input
         if self.share_rgb_model:
             # pass all rgb obs to rgb model
@@ -183,8 +188,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 else:
                     img = self.key_transform_map[key](img)
                     feature = self.key_model_map[key](img)
-                features.append(feature)
-
+                features.append(feature.to(device))
+                #print(f"{key}: {features[-1].device}")
         # process lowdim input
         for key in self.low_dim_keys:
             data = obs_dict[key]
@@ -193,7 +198,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
             else:
                 assert batch_size == data.shape[0]
             assert data.shape[1:] == self.key_shape_map[key]
-            features.append(data)
+            features.append(data.to(device))
+            #print(f"{key}: {features[-1].device}")
 
         # concatenate all features
         result = torch.cat(features, dim=-1)

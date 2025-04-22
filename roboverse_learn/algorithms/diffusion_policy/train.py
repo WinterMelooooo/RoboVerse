@@ -38,8 +38,8 @@ def main(cfg: OmegaConf):
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend="Gloo")
 
-
-    workspace: BaseWorkspace = cls(cfg, local_rank=local_rank, world_size=world_size)
+    output_dir = cfg.training.output_dir if cfg.training.output_dir else None    
+    workspace: BaseWorkspace = cls(cfg, local_rank=local_rank, world_size=world_size, output_dir=output_dir)
     workspace.run()
 
 
