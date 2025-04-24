@@ -19,7 +19,7 @@ store_pnt_cloud=${10:-0} # 0 or 1
 tag="${11:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
 output_dir=${12:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
-config_name=robot_dp_rgbd
+config_name=robot_dp_pntcloud
 horizon=8
 n_obs_steps=3
 n_action_steps=4

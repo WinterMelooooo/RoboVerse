@@ -126,5 +126,6 @@ class DPRunner(PolicyRunner):
             assert obs_dict["head_cam"].shape[1] == 4, (
                 f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
             )
-
+        if "point_cloud" in self.yaml_cfg.task.shape_meta.obs.keys():
+            obs_dict["point_cloud"] = obs["point_cloud"]
         return obs_dict

@@ -15,7 +15,7 @@ from diffusion_policy.policy.base_policy import BasePolicy
 from diffusion_policy.model.diffusion.conditional_unet1d import ConditionalUnet1D
 from diffusion_policy.model.diffusion.mask_generator import LowdimMaskGenerator
 from diffusion_policy.common.pytorch_util import dict_apply
-from diffusion_policy.common.model_util import print_params
+#from diffusion_policy.common.model_util import print_params
 from diffusion_policy.model.vision.dp3_encoder import DP3Encoder
 
 class DP3(BasePolicy):
@@ -58,7 +58,7 @@ class DP3(BasePolicy):
 
 
         obs_encoder = DP3Encoder(observation_space=obs_dict,
-                                                   img_crop_shape=crop_shape,
+                                                img_crop_shape=crop_shape,
                                                 out_channel=encoder_output_dim,
                                                 pointcloud_encoder_cfg=pointcloud_encoder_cfg,
                                                 use_pc_color=use_pc_color,
@@ -120,7 +120,7 @@ class DP3(BasePolicy):
         self.num_inference_steps = num_inference_steps
 
 
-        print_params(self)
+        #print_params(self)
 
     # ========= inference  ============
     def conditional_sample(self,

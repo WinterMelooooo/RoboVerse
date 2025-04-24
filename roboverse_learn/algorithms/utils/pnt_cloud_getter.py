@@ -143,7 +143,7 @@ class PntCloudGetter:
 
             if not use_RGB:
                 point_cloud = point_cloud[:, :3]
-            device = getattr(rgb, 'device', torch.device('cpu'))
+            device = getattr(rgb, "device", torch.device("cpu"))
             return torch.from_numpy(point_cloud).to(device).float()
 
         elif len(rgb.shape) == 4:  # [N_env,C,H,W]
@@ -157,7 +157,7 @@ class PntCloudGetter:
                 point_cloud = self.get_point_cloud(
                     single_rgb, single_depth, single_cam_intr, single_cam_extr, use_RGB=use_RGB
                 )
-                pointcloud_batch.append(point_cloud)
+                pointcloud_batch.append(point_cloud.cpu())
             pointcloud_batch = np.stack(pointcloud_batch, axis=0)
             return pointcloud_batch
 

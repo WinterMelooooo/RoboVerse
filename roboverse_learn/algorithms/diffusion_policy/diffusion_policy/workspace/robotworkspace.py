@@ -156,7 +156,8 @@ class RobotWorkspace(BaseWorkspace):
             json_logger = JsonLogger(log_path)
             json_logger.start()
         for local_epoch_idx in range(cfg.training.num_epochs):
-            train_dataloader.sampler.set_epoch(local_epoch_idx)
+            if self.world_size > 1:
+                train_dataloader.sampler.set_epoch(local_epoch_idx)
             step_log = dict()
             # ========= train for this epoch ==========
             if cfg.training.freeze_encoder:

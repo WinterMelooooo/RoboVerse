@@ -20,8 +20,6 @@ def get_resnet(name, weights=None, **kwargs):
     # )
     # return resnet_new
     return resnet
-
-
 def get_r3m(name, **kwargs):
     """
     name: resnet18, resnet34, resnet50
@@ -76,7 +74,7 @@ def get_dformer(name, **kwargs):
         weight = weight["state_dict"]
     print(model.load_state_dict(weight, strict=False))
     if not args.syncbn:
-        device = torch.device("cpu")  
+        device = torch.device("cpu")
     else:
         try:
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")

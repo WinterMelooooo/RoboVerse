@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - task: default_task_pntcloud
+  - task: default_task_rgbd_maniskill
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -14,6 +14,7 @@ n_obs_steps: 2
 n_action_steps: 8
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
+past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
@@ -30,54 +31,47 @@ policy_runner:
       rotation_rep: "quaternion"
       gripper_rep: "q_pos"
 policy:
-  _target_: diffusion_policy.policy.dp3_policy.DP3
+  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
 
-  use_point_crop: true
-  cond_predict_scale: true
-
-  diffusion_step_embed_dim: 128
-  down_dims:
-  - 512
-  - 1024
-  - 2048
-  crop_shape:
-  - 80
-  - 80
-  encoder_output_dim: 64
-  horizon: ${horizon}
-  kernel_size: 5
-  n_action_steps: ${n_action_steps}
-  n_groups: 8
-  n_obs_steps: ${n_obs_steps}
+  shape_meta: ${shape_meta}
 
   noise_scheduler:
-    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
     num_train_timesteps: 100
     beta_start: 0.0001
     beta_end: 0.02
     beta_schedule: squaredcos_cap_v2
-    clip_sample: True
-    set_alpha_to_one: True
-    steps_offset: 0
-    prediction_type: sample
+    variance_type: fixed_small # Yilun's paper uses fixed_small_log instead, but easy to cause Nan
+    clip_sample: True # required when predict_epsilon=False
+    prediction_type: epsilon # or sample
 
+  obs_encoder:
+    _target_: diffusion_policy.model.vision.multi_image_obs_encoder.MultiImageObsEncoder
+    shape_meta: ${shape_meta}
+    rgb_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_dformer
+      name: DFormerv2_Base
+      weights: null
+    resize_shape: null
+    crop_shape: null
+    # constant center crop
+    random_crop: True
+    use_group_norm: True
+    share_rgb_model: False
+    imagenet_norm: True
 
-  num_inference_steps: 10
-  obs_as_global_cond: true
-  shape_meta: ${shape_meta}
-
-  use_pc_color: false
-  pointnet_type: "pointnet"
-
-
-  pointcloud_encoder_cfg:
-    in_channels: 3
-    out_channels: ${policy.encoder_output_dim}
-    use_layernorm: true
-    final_norm: layernorm # layernorm, none
-    normal_channel: false
-
-
+  horizon: ${horizon}
+  n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
+  n_obs_steps: ${n_obs_steps}
+  num_inference_steps: 100
+  obs_as_global_cond: ${obs_as_global_cond}
+  # crop_shape: null
+  diffusion_step_embed_dim: 64
+  # down_dims: [512, 1024, 2048]
+  down_dims: [64, 128, 256]
+  kernel_size: 5
+  n_groups: 8
+  cond_predict_scale: True
 
   # scheduler.step params
   # predict_epsilon: True
@@ -91,14 +85,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 256
+  batch_size: 16
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 256
+  batch_size: 16
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -106,31 +100,38 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 2.0e-4
+  lr: 6.25e-6
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
 
 training:
   device: "cuda:0"
-  seed: 42
+  seed: 1
   debug: False
   resume: True
   tag: 0
   output_dir: ""
+  # optimization
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 3000
+  num_epochs: 1500
   gradient_accumulate_every: 1
+  # EMA destroys performance when used with BatchNorm
+  # replace BatchNorm with GroupNorm.
   use_ema: True
+  freeze_encoder: False
+  # training loop control
+  # in epochs
   rollout_every: 50
   checkpoint_every: 50
-  val_every: 1
+  val_every: 5
   sample_every: 5
-  max_train_steps: null
-  max_val_steps: null
+  # steps per epoch
+  max_train_steps: 250
+  max_val_steps: 250
+  # misc
   tqdm_interval_sec: 1.0
-  freeze_encoder: False
 
 logging:
   project: RoboVerse_DP

@@ -120,6 +120,30 @@ def main():
         subset=args.subset,
     )
     action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
+    if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+        try:
+            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
+        except:
+            import sys
+
+            sys.path.append(".")
+            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
+        pnt_cloud_getter = PntCloudGetter(args.task.split("_")[0], use_point_crop=True)
+        temp_dict = {
+            "cam_pos": [1.5, 0.0, 1.5],
+            "cam_look_at": [0.0, 0.0, 0.0],
+            "cam_intr": torch.tensor([
+                [293.19970703125, 0.0, 128.0],
+                [0.0, 293.19970703125, 128.0],
+                [0.0, 0.0, 1.0],
+            ]).cpu(),
+            "cam_extr": torch.tensor([
+                [0.0, 1.0, -0.0, -0.0],
+                [0.7071067690849304, -0.0, -0.7071067690849304, -0.0],
+                [-0.7071068286895752, 0.0, -0.7071068286895752, 2.1213204860687256],
+                [0.0, 0.0, 0.0, 1.0],
+            ]).cpu(),
+        }
     ## Data
     tic = time.time()
     assert os.path.exists(task.traj_filepath), f"Trajectory file: {task.traj_filepath} does not exist."
@@ -169,6 +193,14 @@ def main():
             ):
                 new_obs["depth"] = torch.stack([env["cameras"]["camera0"]["depth"] for env in obs])
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
+            if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+                pnt_cloud = pnt_cloud_getter.get_point_cloud(
+                    new_obs["rgb"],
+                    torch.stack([env["cameras"]["camera0"]["depth"] for env in obs]),
+                    torch.stack([temp_dict["cam_intr"] for env in obs]),
+                    torch.stack([temp_dict["cam_extr"] for env in obs]),  # TODO:fix this
+                )
+                new_obs["point_cloud"] = pnt_cloud
             images_list.append(np.array(new_obs["rgb"].cpu()))
             action = policyRunner.get_action(new_obs)
 
