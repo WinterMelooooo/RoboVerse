@@ -82,3 +82,18 @@ def get_dformer(name, **kwargs):
             device = torch.device("cuda")
     model.to(device)
     return DFormerFeatureExtractor(model.backbone, device=device)
+
+def get_resnet_rgbd(name, weights = None, **kwargs):
+    import torch.nn as nn
+    if (weights == "r3m") or (weights == "R3M"):
+        return get_r3m(name=name, **kwargs)
+
+    func = getattr(torchvision.models, name)
+    resnet = func(weights=weights, **kwargs)
+    resnet.conv1 = nn.Conv2d(4, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    resnet.fc = torch.nn.Identity()
+    return resnet
+
+def get_pointnet(name, **kwargs):
+    from .pointnet import PointNetfeat
+    return PointNetfeat()

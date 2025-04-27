@@ -18,7 +18,7 @@ ADROIT_PC_TRANSFORM = np.array([
 
 ENV_POINT_CLOUD_CONFIG = {
     "CloseBox": {
-        "min_bound": [-0.71, -1.75, 0.0025],  # gt approxiamately [-4.2, -2.5, -0.74]
+        "min_bound": [-0.71, -1.75, 0.0],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
         "max_bound": [0.6, 0.5, 100],  # gt approxiamately [0.75, 2.45, 0.98]
         "num_points": 4096,
         "point_sampling_method": "fps",
@@ -26,7 +26,17 @@ ENV_POINT_CLOUD_CONFIG = {
         "transform": None,
         "scale": np.array([1, 1, 1]),
         "offset": np.array([0, 0, 0]),
-    }
+    },
+    "StackCube": {
+        "min_bound": [-0.71, -1.75, 0.0],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
+        "max_bound": [0.6, 0.5, 100],  # gt approxiamately [0.75, 2.45, 0.98]
+        "num_points": 4096,
+        "point_sampling_method": "fps",
+        "cam_names": ["top"],
+        "transform": None,
+        "scale": np.array([1, 1, 1]),
+        "offset": np.array([0, 0, 0]),
+    },
 }
 
 BBOX_OFFSET_DIC = {1: [0.0, 0.0, 0.0], 25: [8.0, -8.01, 0.0], 50: [14.3, -12.01, 0.0]}

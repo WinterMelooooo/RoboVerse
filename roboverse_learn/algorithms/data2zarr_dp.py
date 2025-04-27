@@ -336,6 +336,10 @@ def main():
             action_arrays = []
             state_arrays = []
             episode_ends_arrays = []
+            if args.store_rgbd:
+                head_camera_depth_arrays = []
+            if args.store_pnt_cloud:
+                head_camera_pnt_cloud_arrays = []
             current_batch += 1
 
     # Save metadata to a JSON file

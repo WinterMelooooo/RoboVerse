@@ -110,6 +110,8 @@ training:
   seed: 42
   debug: False
   resume: True
+  tag: 0
+  output_dir: ""
   # optimization
   lr_scheduler: cosine
   lr_warmup_steps: 500

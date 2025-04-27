@@ -163,7 +163,9 @@ class PointCloudGenerator(object):
 
         # combined_cloud_colors = np.asarray(combined_cloud.colors)  # Get the colors, ranging [0,1].
         combined_cloud_colors = rgb.reshape(-1, 3)  # range [0, 255]
-        combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors.cpu()), axis=1)
+        if not isinstance(combined_cloud_colors, np.ndarray):
+            combined_cloud_colors = combined_cloud_colors.cpu().numpy()
+        combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors), axis=1)
         return combined_cloud, depth
 
     # https://github.com/htung0101/table_dome/blob/master/table_dome_calib/utils.py#L160

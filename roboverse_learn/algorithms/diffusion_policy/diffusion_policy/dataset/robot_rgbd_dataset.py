@@ -134,7 +134,7 @@ class RobotImageDataset(BaseImageDataset):
         head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0
         action = samples["action"].to(device, non_blocking=True)
         assert samples["head_camera_depth"].shape[2] == 3, f"head_camera_depth should be 3 channels, but got {samples['head_camera_depth'].shape}"
-        depth = samples["head_camera_depth"][:,:,:1,:,:].to(device, non_blocking=True) / 255.0
+        depth = samples["head_camera_depth"][:,:,:1,:,:].to(device, non_blocking=True) / 255.0 # (B, T, 4, H, W) [0,1]
         head_cam = torch.cat([head_cam, depth], dim=2)  # B, T, 4, H, W
         assert head_cam.shape[2] == 4, f"head_cam should be 4 channels, but got {head_cam.shape}"
         return {

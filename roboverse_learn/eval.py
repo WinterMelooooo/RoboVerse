@@ -27,7 +27,12 @@ from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors.cameras import PinholeCameraCfg
 from metasim.constants import SimType
 from metasim.utils.demo_util import get_traj
-from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task, get_wrapper_class
+from metasim.utils.setup_util import (
+    get_robot,
+    get_sim_env_class,
+    get_task,
+    get_wrapper_class,
+)
 from roboverse_learn.algorithms import PolicyRunner, get_runner
 
 
@@ -187,19 +192,30 @@ def main():
                     for env in obs
                 ]),
             }
-            if (
-                "head_cam" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-                and policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+            if "head_cam" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() and (
+                policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+                or policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
             ):
-                new_obs["depth"] = torch.stack([env["cameras"]["camera0"]["depth"] for env in obs])
+                new_obs["depth"] = torch.stack([env["cameras"]["camera0"]["depth"] for env in obs])  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
             if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+                depth = torch.stack([
+                    env["cameras"]["camera0"]["depth"] for env in obs
+                ])  # (50, 256, 256, 1) [near, far]
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(
                     new_obs["rgb"],
-                    torch.stack([env["cameras"]["camera0"]["depth"] for env in obs]),
+                    depth,
                     torch.stack([temp_dict["cam_intr"] for env in obs]),
                     torch.stack([temp_dict["cam_extr"] for env in obs]),  # TODO:fix this
                 )
+
+                # idx = np.random.randint(0, pnt_cloud.shape[0])
+                # torch.save(
+                #    pnt_cloud[idx],
+                #    f"tmp//pnt_cloud/pntcloud_eval_{idx}.npy",
+                # )
+                # return
+
                 new_obs["point_cloud"] = pnt_cloud
             images_list.append(np.array(new_obs["rgb"].cpu()))
             action = policyRunner.get_action(new_obs)
@@ -221,7 +237,10 @@ def main():
         for i, demo_idx in enumerate(range(demo_start_idx, demo_end_idx)):
             demo_idx_str = str(demo_idx).zfill(4)
             if i % args.save_video_freq == 0:
-                iio.mimwrite(f"tmp/{ckpt_name}/{demo_idx}.mp4", [images[i] for images in images_list])
+                iio.mimwrite(
+                    f"tmp/{ckpt_name}/{demo_idx}.mp4",
+                    [images[i] for images in images_list],
+                )
             with open(f"tmp/{ckpt_name}/{demo_idx_str}.txt", "w") as f:
                 f.write(f"Demo Index: {demo_idx}\n")
                 f.write(f"Num Envs: {num_envs}\n")
@@ -239,6 +258,7 @@ def main():
         f.write(f"Total Success: {total_success}\n")
         f.write(f"Total Completed: {total_completed}\n")
         f.write(f"Average Success Rate: {total_success / total_completed}\n")
+        f.write(f"ckpt: {args.checkpoint_path}\n")
     env.close()
 
 

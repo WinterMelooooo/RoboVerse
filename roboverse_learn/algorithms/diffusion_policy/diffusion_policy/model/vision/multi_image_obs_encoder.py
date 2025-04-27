@@ -1,10 +1,10 @@
 import copy
+import os
 from typing import Dict, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torchvision
-import os
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
@@ -108,7 +108,9 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                         mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
                     )
 
-                this_transform = nn.Sequential(this_resizer, this_randomizer, this_normalizer)
+                this_transform = nn.Sequential(
+                    this_resizer, this_randomizer, this_normalizer
+                )
                 key_transform_map[key] = this_transform
             elif type == "low_dim":
                 low_dim_keys.append(key)
@@ -128,7 +130,105 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 if this_model is not None:
                     key_model_map[key] = this_model
                 from .preproccess import Preprocessor
-                self.preprocessor = Preprocessor(norm_mean=[0.485, 0.456, 0.406], norm_std=[0.229, 0.224, 0.225], device = this_model.device)
+
+                self.preprocessor = Preprocessor(
+                    norm_mean=[0.485, 0.456, 0.406],
+                    norm_std=[0.229, 0.224, 0.225],
+                    device=this_model.device,
+                )
+
+            elif type == "rgbd_resnet":
+                rgb_keys.append(key)
+                # configure model for this key
+                this_model = None
+                if not share_rgb_model:
+                    if isinstance(rgb_model, dict):
+                        # have provided model for each key
+                        this_model = rgb_model[key]
+                    else:
+                        assert isinstance(rgb_model, nn.Module)
+                        # have a copy of the rgb model
+                        this_model = copy.deepcopy(rgb_model)
+
+                if this_model is not None:
+                    if use_group_norm:
+                        this_model = replace_submodules(
+                            root_module=this_model,
+                            predicate=lambda x: isinstance(x, nn.BatchNorm2d),
+                            func=lambda x: nn.GroupNorm(
+                                num_groups=x.num_features // 16,
+                                num_channels=x.num_features,
+                            ),
+                        )
+                    key_model_map[key] = this_model
+
+                # configure resize
+                input_shape = shape
+                this_resizer = nn.Identity()
+                if resize_shape is not None:
+                    if isinstance(resize_shape, dict):
+                        h, w = resize_shape[key]
+                    else:
+                        h, w = resize_shape
+                    this_resizer = torchvision.transforms.Resize(size=(h, w))
+                    input_shape = (shape[0], h, w)
+
+                # configure randomizer
+                this_randomizer = nn.Identity()
+                if crop_shape is not None:
+                    if isinstance(crop_shape, dict):
+                        h, w = crop_shape[key]
+                    else:
+                        h, w = crop_shape
+                    if random_crop:
+                        this_randomizer = CropRandomizer(
+                            input_shape=input_shape,
+                            crop_height=h,
+                            crop_width=w,
+                            num_crops=1,
+                            pos_enc=False,
+                        )
+                    else:
+                        this_normalizer = torchvision.transforms.CenterCrop(size=(h, w))
+                # configure normalizer
+                this_normalizer = nn.Identity()
+                if imagenet_norm:
+                    this_normalizer = torchvision.transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406, 0.308515],
+                        std=[0.229, 0.224, 0.225, 0.299096],
+                    )
+
+                this_transform = nn.Sequential(
+                    this_resizer, this_randomizer, this_normalizer
+                )
+                key_transform_map[key] = this_transform
+            elif type == "point_cloud":
+                rgb_keys.append(key)
+                # configure model for this key
+                this_model = None
+                if not share_rgb_model:
+                    if isinstance(rgb_model, dict):
+                        # have provided model for each key
+                        this_model = rgb_model[key]
+                    else:
+                        assert isinstance(rgb_model, nn.Module)
+                        # have a copy of the rgb model
+                        this_model = copy.deepcopy(rgb_model)
+
+                if this_model is not None:
+                    if use_group_norm:
+                        this_model = replace_submodules(
+                            root_module=this_model,
+                            predicate=lambda x: isinstance(x, nn.BatchNorm2d),
+                            func=lambda x: nn.GroupNorm(
+                                num_groups=x.num_features // 16,
+                                num_channels=x.num_features,
+                            ),
+                        )
+                    key_model_map[key] = this_model
+
+                key_transform_map[key] = nn.Identity()
+
             else:
                 raise RuntimeError(f"Unsupported obs type: {type}")
         rgb_keys = sorted(rgb_keys)
@@ -177,19 +277,28 @@ class MultiImageObsEncoder(ModuleAttrMixin):
             # run each rgb obs to independent models
             for key in self.rgb_keys:
                 img = obs_dict[key]
+                if key == "point_cloud":
+                    img = (
+                        img[:, :, :3].permute(0, 2, 1)
+                        if img.shape[2] == 6 or img.shape[2] == 3
+                        else img
+                    )
                 if batch_size is None:
                     batch_size = img.shape[0]
                 else:
                     assert batch_size == img.shape[0]
-                assert img.shape[1:] == self.key_shape_map[key]
+                assert img.shape[1:] == self.key_shape_map[key], (
+                    f"{img.shape} vs {self.key_shape_map[key]}"
+                )
                 if hasattr(self, "preprocessor"):
                     img, depth = self.preprocessor(img)
                     feature = self.key_model_map[key](img, depth)
                 else:
+                    # print(f"{key}: {img.shape}")
                     img = self.key_transform_map[key](img)
                     feature = self.key_model_map[key](img)
                 features.append(feature.to(device))
-                #print(f"{key}: {features[-1].device}")
+                # print(f"{key}: {features[-1].device}")
         # process lowdim input
         for key in self.low_dim_keys:
             data = obs_dict[key]
@@ -199,7 +308,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                 assert batch_size == data.shape[0]
             assert data.shape[1:] == self.key_shape_map[key]
             features.append(data.to(device))
-            #print(f"{key}: {features[-1].device}")
+            # print(f"{key}: {features[-1].device}")
 
         # concatenate all features
         result = torch.cat(features, dim=-1)
@@ -212,8 +321,15 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         batch_size = 1
         for key, attr in obs_shape_meta.items():
             shape = tuple(attr["shape"])
-            this_obs = torch.zeros((batch_size,) + shape, dtype=self.dtype, device=self.device)
+            this_obs = torch.zeros(
+                (batch_size,) + shape, dtype=self.dtype, device=self.device
+            )
             example_obs_dict[key] = this_obs
-        example_output = self.forward(example_obs_dict)
+        was_training = self.training
+        self.eval()
+        with torch.no_grad():
+            example_output = self.forward(example_obs_dict)
+        if was_training:
+            self.train()
         output_shape = example_output.shape[1:]
         return output_shape

@@ -111,16 +111,20 @@ class DPRunner(PolicyRunner):
         Args:
             obs: dict{key: (N_env, value)}
         """
-        obs = dict_apply(obs, lambda x: x.to(device=self.device) if isinstance(x, torch.Tensor) else x)
+        obs = dict_apply(
+            obs,
+            lambda x: x.to(device=self.device) if isinstance(x, torch.Tensor) else x,
+        )
         obs_dict = super().process_obs(obs)
         if (
             "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()
             and self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
         ):
+            depth = obs["depth"]  # (N_env, H, W, 1) [znear, zfar]
             if self.policy_cfg.obs_config.norm_image:
-                depth = obs["depth"].permute(0, 3, 1, 2) / 255.0
-            else:
-                depth = obs["depth"].permute(0, 3, 1, 2)
+                min_d = depth.amin(dim=(1, 2, 3), keepdim=True)
+                max_d = depth.amax(dim=(1, 2, 3), keepdim=True)
+                depth = (depth - min_d) / (max_d - min_d)
             assert depth.shape[1] == 1, f"depth should be 1 channel, but got {depth.shape}"
             obs_dict["head_cam"] = torch.cat([obs_dict["head_cam"], depth], dim=1)
             assert obs_dict["head_cam"].shape[1] == 4, (
@@ -128,4 +132,19 @@ class DPRunner(PolicyRunner):
             )
         if "point_cloud" in self.yaml_cfg.task.shape_meta.obs.keys():
             obs_dict["point_cloud"] = obs["point_cloud"]
+
+        if (
+            "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()
+            and self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
+        ):
+            depth = obs["depth"]  # (N_env, H, W, 1) [znear, zfar]
+            if self.policy_cfg.obs_config.norm_image:
+                depth = (depth - depth.min()) / (depth.max() - depth.min())
+
+            depth = depth.permute(0, 3, 1, 2)  # (N_env, 1, H, W)
+            assert depth.shape[1] == 1, f"depth should be 1 channel, but got {depth.shape}"
+            obs_dict["head_cam"] = torch.cat([obs_dict["head_cam"], depth], dim=1)
+            assert obs_dict["head_cam"].shape[1] == 4, (
+                f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
+            )
         return obs_dict

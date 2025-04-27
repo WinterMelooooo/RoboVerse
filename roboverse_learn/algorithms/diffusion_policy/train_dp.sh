@@ -19,7 +19,7 @@ store_pnt_cloud=${10:-0} # 0 or 1
 tag="${11:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
 output_dir=${12:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
-config_name=robot_dp_pntcloud
+config_name=robot_dp_test_rgbd
 horizon=8
 n_obs_steps=3
 n_action_steps=4
@@ -45,7 +45,7 @@ echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
-torchrun --nproc_per_node=${NPROC} --nnodes=1 \
+torchrun --nproc_per_node=${NPROC} --nnodes=1 --master_port=50001 \
 roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
 task.name=${task_name}_${extra} \
 task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
