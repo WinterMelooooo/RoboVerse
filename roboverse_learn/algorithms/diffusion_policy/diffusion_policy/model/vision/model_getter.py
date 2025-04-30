@@ -97,3 +97,17 @@ def get_resnet_rgbd(name, weights = None, **kwargs):
 def get_pointnet(name, **kwargs):
     from .pointnet import PointNetfeat
     return PointNetfeat()
+
+
+def get_vit(name, **kwargs):
+    """
+    name: vit_base_patch16, vit_large_patch16
+    """
+    try:
+        from .vit import ViT
+    except:
+        import sys
+        sys.path.append("/home/ghr/yktang/RoboVerse/roboverse_learn/algorithms/diffusion_policy/diffusion_policy/model/vision")
+        from vit import ViT
+    vit = ViT(name, **kwargs).to(device="cpu")
+    return vit

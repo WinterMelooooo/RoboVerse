@@ -9,6 +9,9 @@ from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
 
+dic_means = {"CloseBox": 0.308515, "StackCube": 0.300145}
+dic_stds = {"CloseBox": 0.299096, "StackCube": 0.303170}
+
 
 class MultiImageObsEncoder(ModuleAttrMixin):
     def __init__(
@@ -25,6 +28,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         # renormalize rgb input with imagenet normalization
         # assuming input in [0,1]
         imagenet_norm: bool = False,
+        test_rescale: bool = False,
+        name=None,
     ):
         """
         Assumes rgb input: B,C,H,W
@@ -100,14 +105,25 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                             pos_enc=False,
                         )
                     else:
-                        this_normalizer = torchvision.transforms.CenterCrop(size=(h, w))
+                        this_randomizer = torchvision.transforms.CenterCrop(size=(h, w))
                 # configure normalizer
                 this_normalizer = nn.Identity()
                 if imagenet_norm:
-                    this_normalizer = torchvision.transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    )
-
+                    mean = [0.485, 0.456, 0.406]
+                    std = [0.229, 0.224, 0.225]
+                    if not test_rescale:
+                        this_normalizer = torchvision.transforms.Normalize(
+                            mean=mean, std=std
+                        )
+                        print(f"{key} mean: {mean}, std: {std}")
+                    else:
+                        this_normalizer = torchvision.transforms.Normalize(
+                            mean=[2 * x - 1 for x in mean],
+                            std=[2 * x for x in std],
+                        )
+                        print(
+                            f"{key} mean: {[2 * x - 1 for x in mean]}, std: {[2 * x for x in std]}"
+                        )
                 this_transform = nn.Sequential(
                     this_resizer, this_randomizer, this_normalizer
                 )
@@ -189,14 +205,32 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                             pos_enc=False,
                         )
                     else:
-                        this_normalizer = torchvision.transforms.CenterCrop(size=(h, w))
+                        this_randomizer = torchvision.transforms.CenterCrop(size=(h, w))
                 # configure normalizer
                 this_normalizer = nn.Identity()
                 if imagenet_norm:
-                    this_normalizer = torchvision.transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406, 0.308515],
-                        std=[0.229, 0.224, 0.225, 0.299096],
-                    )
+                    mean, std = None, None
+                    for task_name in dic_means.keys():
+                        if task_name in name:
+                            mean = dic_means[task_name]
+                            std = dic_stds[task_name]
+                            break
+                    if mean is None or std is None:
+                        raise ValueError(f"Invalid name: {name}")
+                    mean = [0.485, 0.456, 0.406, mean]
+                    std = [0.229, 0.224, 0.225, std]
+                    if not test_rescale:
+                        this_normalizer = torchvision.transforms.Normalize(
+                            mean=mean, std=std
+                        )
+                        print(f"{task_name} mean: {mean}, std: {std}")
+                    else:
+                        this_normalizer = torchvision.transforms.Normalize(
+                            [2 * x - 1 for x in mean], [2 * x for x in std]
+                        )
+                        print(
+                            f"{task_name} mean: {[2 * x - 1 for x in mean]}, std: {[2 * x for x in std]}"
+                        )
 
                 this_transform = nn.Sequential(
                     this_resizer, this_randomizer, this_normalizer
@@ -272,7 +306,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
             feature = torch.moveaxis(feature, 0, 1)
             # (B,N*D)
             feature = feature.reshape(batch_size, -1)
-            features.append(feature)
+            features.append(feature.to(device))
         else:
             # run each rgb obs to independent models
             for key in self.rgb_keys:

@@ -259,6 +259,7 @@ def main():
         f.write(f"Total Completed: {total_completed}\n")
         f.write(f"Average Success Rate: {total_success / total_completed}\n")
         f.write(f"ckpt: {args.checkpoint_path}\n")
+        f.write(f"random level: {args.random.level}\n")
     env.close()
 
 

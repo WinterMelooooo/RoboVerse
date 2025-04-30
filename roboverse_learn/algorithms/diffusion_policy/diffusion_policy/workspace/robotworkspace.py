@@ -91,9 +91,8 @@ class RobotWorkspace(BaseWorkspace):
         lr_scheduler = get_scheduler(
             cfg.training.lr_scheduler,
             optimizer=self.optimizer,
-            num_warmup_steps=cfg.training.lr_warmup_steps,
+            num_warmup_steps=cfg.training.lr_warmup_steps // self.world_size,
             num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
-            # * self.world_size
             // cfg.training.gradient_accumulate_every,
             # pytorch assumes stepping LRScheduler every epoch
             # however huggingface diffusers steps it every batch
