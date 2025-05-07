@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 import pathlib
 import random
@@ -32,7 +33,17 @@ class RobotWorkspace(BaseWorkspace):
     ):
         self.local_rank = local_rank if local_rank is not None else 0
         self.world_size = world_size if world_size is not None else 1
-        cfg.optimizer.lr = cfg.optimizer.lr * self.world_size
+        policy = cfg.optimizer.get("multigpu_lr_policy", None)
+        if not policy or policy == "sqrt":
+            cfg.optimizer.lr = cfg.optimizer.lr * math.sqrt(self.world_size)
+        elif policy == "linear":
+            cfg.optimizer.lr = cfg.optimizer.lr * self.world_size
+        else:
+            raise ValueError(
+                f"Unknown multigpu_lr_policy {policy}, only sqrt and linear are supported"
+            )
+        if "multigpu_lr_policy" in cfg.optimizer:
+            del cfg.optimizer.multigpu_lr_policy
         super().__init__(cfg, output_dir=output_dir)
         device = torch.device(f"cuda:{self.local_rank}")
         # set seed
@@ -88,16 +99,27 @@ class RobotWorkspace(BaseWorkspace):
         if cfg.training.use_ema:
             self.ema_model.set_normalizer(normalizer)
         # configure lr scheduler
-        lr_scheduler = get_scheduler(
-            cfg.training.lr_scheduler,
-            optimizer=self.optimizer,
-            num_warmup_steps=cfg.training.lr_warmup_steps // self.world_size,
-            num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
-            // cfg.training.gradient_accumulate_every,
-            # pytorch assumes stepping LRScheduler every epoch
-            # however huggingface diffusers steps it every batch
-            last_epoch=self.global_step - 1,
-        )
+        if cfg.training.lr_scheduler == "OneCycleLR":
+            kwargs = dict(cfg.training.lr_scheduler_params)  # 或者用 OmegaConf.to_container(...)
+            effective_steps = len(train_dataloader) // cfg.training.gradient_accumulate_every
+            kwargs["steps_per_epoch"] = effective_steps
+            kwargs["epochs"] = cfg.training.num_epochs
+            lr_scheduler = get_scheduler(
+                cfg.training.lr_scheduler,
+                optimizer=self.optimizer,
+                **kwargs,
+            )
+        else:
+            lr_scheduler = get_scheduler(
+                cfg.training.lr_scheduler,
+                optimizer=self.optimizer,
+                num_warmup_steps=cfg.training.lr_warmup_steps // self.world_size,
+                num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
+                // cfg.training.gradient_accumulate_every,
+                # pytorch assumes stepping LRScheduler every epoch
+                # however huggingface diffusers steps it every batch
+                last_epoch=self.global_step - 1,
+            )
         # configure ema
         ema: EMAModel = None
         if cfg.training.use_ema:
@@ -176,7 +198,7 @@ class RobotWorkspace(BaseWorkspace):
             for batch_idx, batch in enumerate(tepoch):
                 batch = dataset.postprocess(batch, device)
                 if train_sampling_batch is None:
-                    train_sampling_batch = batch
+                    train_sampling_batch = copy.deepcopy(batch)
                 # print("obs_dict:", batch)
                 # print("dict_keys:", batch.keys())
                 # print("dict_items:", batch.items())
@@ -272,7 +294,7 @@ class RobotWorkspace(BaseWorkspace):
                 with torch.no_grad():
                     # sample trajectory from training set, and evaluate difference
                     batch = train_sampling_batch
-                    obs_dict = batch["obs"]
+                    obs_dict = copy.deepcopy(batch["obs"])
                     # print("obs_dict:", obs_dict)
                     # print("dict_keys:", obs_dict.keys())
                     # print("dict_items:", obs_dict.items())

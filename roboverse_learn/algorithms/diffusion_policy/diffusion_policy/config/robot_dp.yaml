@@ -2,6 +2,8 @@ defaults:
   - _self_
   - task: default_task
 
+encoder_name: rgb_resnet18
+
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
 
@@ -139,8 +141,8 @@ logging:
   project: RoboVerse_DP
   resume: True
   mode: online
-  name: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
-  tags: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  tags: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
   id: null
   group: null
 
@@ -152,17 +154,17 @@ checkpoint:
     format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True
   save_last_snapshot: False
-  save_root_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
+  save_root_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
 
 multi_run:
-  run_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
-  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
+  run_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
 
 hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
+    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
   sweep:
-    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
+    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
     subdir: ${hydra.job.num}

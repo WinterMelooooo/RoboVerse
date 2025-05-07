@@ -1,11 +1,11 @@
 defaults:
   - _self_
-  - task: default_task_pntcloud
+  - task: default_task_pntcloud_spUnet
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
 
-encoder_name: pntcloud_dp3
+encoder_name: pntcloud_spUnet
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
@@ -16,6 +16,7 @@ n_obs_steps: 2
 n_action_steps: 8
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
+past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
@@ -31,58 +32,54 @@ policy_runner:
     ee_cfg:
       rotation_rep: "quaternion"
       gripper_rep: "q_pos"
+
+
+
 policy:
-  _target_: diffusion_policy.policy.dp3_policy.DP3
-
-  use_point_crop: true
-  cond_predict_scale: true
-
-  diffusion_step_embed_dim: 128
-  down_dims:
-  - 512
-  - 1024
-  - 2048
-  crop_shape:
-  - 80
-  - 80
-  encoder_output_dim: 64
-  horizon: ${horizon}
-  kernel_size: 5
-  n_action_steps: ${n_action_steps}
-  n_groups: 8
-  n_obs_steps: ${n_obs_steps}
-
-  noise_scheduler:
-    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
-    num_train_timesteps: 100
-    beta_start: 0.0001
-    beta_end: 0.02
-    beta_schedule: squaredcos_cap_v2
-    clip_sample: True
-    set_alpha_to_one: True
-    steps_offset: 0
-    prediction_type: sample
-
-
-  num_inference_steps: 10
-  obs_as_global_cond: true
+  _target_: diffusion_policy.policy.spUnet_pcd_policy.spUnetPcdPolicy
   shape_meta: ${shape_meta}
 
-  use_pc_color: false
-  pointnet_type: "pointnet"
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    beta_start: 0.0001
+    clip_sample: true
+    num_train_timesteps: 100
+    prediction_type: epsilon
+    variance_type: fixed_small
 
+  obs_encoder:
+    _target_: diffusion_policy.model.vision.pcd_obs_encoder.PCDObsEncoder
+    shape_meta: ${shape_meta}
+    pcd_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_spUnet
+      in_channels: 6
+      num_classes: 0
+      pretrained_path: null
+    share_pcd_model: true
+    n_obs_steps: ${n_obs_steps}
+    pcd_nsample: 16
+    pcd_npoints: 2048
+    use_mask: false
+    bg_ratio: 0.0
+    pcd_hidden_dim: 96
+    projector_layers: 2
+    projector_channels: [96, 128, 128]
+    test_rescale: False
+    name: ${task.name}
 
-  pointcloud_encoder_cfg:
-    in_channels: 3
-    out_channels: ${policy.encoder_output_dim}
-    use_layernorm: true
-    final_norm: layernorm # layernorm, none
-    normal_channel: false
-
-
-
-  # scheduler.step params
-  # predict_epsilon: True
+  horizon: ${horizon}
+  n_action_steps: 8
+  n_obs_steps: ${n_obs_steps}
+  num_inference_steps: 100
+  obs_as_global_cond: true
+  # crop_shape: null
+  diffusion_step_embed_dim: 128
+  down_dims: [512, 1024, 2048]
+  kernel_size: 5
+  n_groups: 8
+  cond_predict_scale: true
 
 ema:
   _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
@@ -93,14 +90,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 128
+  batch_size: 16
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 128
+  batch_size: 16
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -108,7 +105,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 5.0e-5
+  lr: 1.0e-4
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
@@ -120,19 +117,32 @@ training:
   resume: True
   tag: 0
   output_dir: ""
-  lr_scheduler: cosine
-  lr_warmup_steps: 5000
-  num_epochs: 3000
+  # optimization
+  lr_scheduler: OneCycleLR
+  lr_scheduler_params:
+    max_lr: 0.0001
+    pct_start: 0.15
+    anneal_strategy: cos
+    div_factor: 100.0
+    final_div_factor: 1000.0
+  lr_warmup_steps: 40000
+  num_epochs: 1000
   gradient_accumulate_every: 1
+  # EMA destroys performance when used with BatchNorm
+  # replace BatchNorm with GroupNorm.
   use_ema: True
-  rollout_every: 50
-  checkpoint_every: 1000
-  val_every: 1
-  sample_every: 5
-  max_train_steps: null
-  max_val_steps: null
-  tqdm_interval_sec: 1.0
   freeze_encoder: False
+  # training loop control
+  # in epochs
+  rollout_every: 50
+  checkpoint_every: 500
+  val_every: 5
+  sample_every: 5
+  # steps per epoch
+  max_train_steps: 250
+  max_val_steps: 250
+  # misc
+  tqdm_interval_sec: 1.0
 
 logging:
   project: RoboVerse_DP
@@ -154,14 +164,14 @@ checkpoint:
   save_root_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
 
 multi_run:
-  run_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+  run_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
   wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
 
 hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
   sweep:
-    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+    dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
     subdir: ${hydra.job.num}

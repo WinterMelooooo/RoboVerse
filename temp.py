@@ -37,6 +37,7 @@ def main():
     parser.add_argument(
         "--calculate_mean_std", action="store_true", help="是否计算深度的均值和标准差"
     )
+    parser.add_argument("--break_pnt_cloud", action="store_true", help="是否中断程序")
     args = parser.parse_args()
 
     depth_dir = os.path.join(args.output_dir, "depth")
@@ -58,6 +59,12 @@ def main():
     head_cams = root["data"]["head_camera"]
     depths = root["data"]["head_camera_depth"]
     pnt_clouds = root["data"]["head_camera_pnt_cloud"]
+    episode_ends = root["meta"]["episode_ends"]
+
+    print(f"len(head_cams): {len(head_cams)}")
+    print(f"len(depths): {len(depths)}")
+    print(f"len(pnt_clouds): {len(pnt_clouds)}")
+    print(f"len(episode_ends): {len(episode_ends)}")
 
     head_cam_exp = head_cams[0]
     depth_exp = depths[0]
@@ -103,6 +110,8 @@ def main():
             your_pointcloud = pcd_dataset[idx]
             output_dir = os.path.join(pnt_cloud_dir, f"{idx}.npy")
             np.save(output_dir, your_pointcloud)
+            if args.break_pnt_cloud:
+                break
 
         # 可视化
         print(f"可视化第 {idx} 个点云（共 {total} 个样本）")

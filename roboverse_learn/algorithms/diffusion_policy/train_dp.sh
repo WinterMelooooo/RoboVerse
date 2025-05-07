@@ -19,12 +19,14 @@ store_pnt_cloud=${10:-0} # 0 or 1
 config_name=${11:-"robot_dp"}
 test_rescale=${12:-0}
 master_port=${13:-50023}
-tag="${14:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${15:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+max_visible_ratio=${14:-100} # 0.5 for 50% visible, 1 for 100% visible
+multigpu_lr_policy=${15:-"sqrt"}
+horizon=${16:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${17:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${18:-4} # 4 for 4 steps, 8 for 8 steps
+tag="${19:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${20:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
-horizon=8
-n_obs_steps=3
-n_action_steps=4
 seed=42
 
 # adding the obs and action space as additional info
@@ -63,3 +65,5 @@ policy_runner.action.delta=${delta_ee} \
 training.output_dir=${output_dir} \
 training.tag=${tag} \
 ++policy.obs_encoder.test_rescale=${test_rescale} \
+++task.dataset.max_visible_ratio=${max_visible_ratio} \
+++optimizer.multigpu_lr_policy=${multigpu_lr_policy} \

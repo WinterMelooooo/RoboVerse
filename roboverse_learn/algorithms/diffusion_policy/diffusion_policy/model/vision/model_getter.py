@@ -111,3 +111,13 @@ def get_vit(name, **kwargs):
         from vit import ViT
     vit = ViT(name, **kwargs).to(device="cpu")
     return vit
+
+
+def get_spUnet(**kwargs):
+    try:
+        from .spUnet import SpUNet
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.spUnet import SpUNet
+    return SpUNet(**kwargs)

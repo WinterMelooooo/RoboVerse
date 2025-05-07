@@ -84,6 +84,7 @@ def main():
     parser.add_argument("--store_rgbd", type=int, choices=[0, 1], default=0)
 
     parser.add_argument("--store_pnt_cloud", type=int, choices=[0, 1], default=0)
+    parser.add_argument("--use_wide_pnt_cloud_range", type=int, choices=[0, 1], default=0)
 
     args = parser.parse_args()
 
@@ -122,7 +123,9 @@ def main():
         from utils.pnt_cloud_getter import PntCloudGetter
 
         head_camera_pnt_cloud_arrays = []
-        pnt_cloud_getter = PntCloudGetter(args.task_name.split("_")[0], use_point_crop=True)
+        pnt_cloud_getter = PntCloudGetter(
+            args.task_name.split("_")[0], use_point_crop=True, use_wide_point_cloud=args.use_wide_pnt_cloud_range
+        )
 
     if args.joint_pos_padding > 0 and args.observation_space == "ee" and args.action_space == "ee":
         logging.warning("Padding is not supported for ee observation and action spaces.")

@@ -114,7 +114,7 @@ def main():
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     ckpt_name = args.checkpoint_path.split("/")[-1] + "_" + time_str
-    ckpt_name = f"{args.task}/{args.algo}/{args.robot}/{ckpt_name}"
+    ckpt_name = f"{args.task}/{args.algo}/{args.robot}/L{args.random.level}/{ckpt_name}"
     runnerCls = get_runner(args.algo)
     policyRunner: PolicyRunner = runnerCls(
         scenario=scenario,
@@ -133,7 +133,10 @@ def main():
 
             sys.path.append(".")
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
-        pnt_cloud_getter = PntCloudGetter(args.task.split("_")[0], use_point_crop=True)
+        use_wide_point_cloud = True if args.random.level >= 2 else False
+        pnt_cloud_getter = PntCloudGetter(
+            args.task.split("_")[0], use_point_crop=True, use_wide_point_cloud=use_wide_point_cloud
+        )
         temp_dict = {
             "cam_pos": [1.5, 0.0, 1.5],
             "cam_look_at": [0.0, 0.0, 0.0],
@@ -253,6 +256,7 @@ def main():
         log.info(f"SuccessOnce: {SuccessOnce}")
         log.info(f"SuccessEnd: {SuccessEnd}")
         log.info(f"TimeOut: {TimeOut}")
+        log.info(f"Finished evaling checkpoint: {args.checkpoint_path.split('/')[-3]}")
     log.info(f"FINAL RESULTS: {total_success / total_completed}")
     with open(f"tmp/{ckpt_name}/final_stats.txt", "w") as f:
         f.write(f"Total Success: {total_success}\n")

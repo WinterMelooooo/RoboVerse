@@ -28,16 +28,22 @@ class RobotImageDataset(BaseImageDataset):
         val_ratio=0.0,
         batch_size=64,
         max_train_episodes=None,
+        max_visible_ratio=100,
     ):
 
         super().__init__()
         # cprint(zarr_path, "red")
         # cprint(batch_size, "red")
-        self.replay_buffer = ReplayBuffer.copy_from_path(
+        self.replay_buffer:ReplayBuffer = ReplayBuffer.copy_from_path(
             zarr_path,
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
             keys=["head_camera", "state", "action"],
         )
+        print(f"Replay buffer size: {self.replay_buffer.n_episodes}")
+        keep_n_episodes = self.replay_buffer.n_episodes * max_visible_ratio / 100.0
+        while self.replay_buffer.n_episodes > keep_n_episodes:
+            self.replay_buffer.pop_episode()
+        print(f"Using {self.replay_buffer.n_episodes} episodes for training and validation.")
 
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
