@@ -20,7 +20,6 @@ from rich.logging import RichHandler
 
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-import torch
 
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.scenario import ScenarioCfg
@@ -149,14 +148,8 @@ def main():
         while step < MaxStep:
             log.debug(f"Step {step}")
             new_obs = {
-                "rgb": torch.stack([env["cameras"]["camera0"]["rgb"] for env in obs]),
-                "joint_qpos": torch.tensor([
-                    [
-                        env["robots"][args.robot]["dof_pos"][k]
-                        for k in sorted(env["robots"][args.robot]["dof_pos"].keys())
-                    ]
-                    for env in obs
-                ]),
+                "rgb": obs.cameras["camera0"].rgb,
+                "joint_qpos": obs.robots[args.robot].joint_pos,
             }
 
             images_list.append(np.array(new_obs["rgb"].cpu()))

@@ -71,14 +71,12 @@ scenario.objects = [
         size=(0.1, 0.1, 0.1),
         color=[1.0, 0.0, 0.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/cube/cube.mjcf",
     ),
     PrimitiveSphereCfg(
         name="sphere",
         radius=0.1,
         color=[0.0, 0.0, 1.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/sphere/sphere.mjcf",
     ),
     RigidObjCfg(
         name="bbq_sauce",
@@ -144,6 +142,6 @@ init_states = [
 ]
 obs, extras = env.reset(states=init_states)
 os.makedirs("get_started/output", exist_ok=True)
-imageio.imwrite(
-    f"get_started/output/0_static_scene_{args.sim}.png", next(iter(obs[0]["cameras"].values()))["rgb"].cpu().numpy()
-)
+save_path = f"get_started/output/0_static_scene_{args.sim}.png"
+log.info(f"Saving image to {save_path}")
+imageio.imwrite(save_path, next(iter(obs.cameras.values())).rgb[0].cpu().numpy())

@@ -5,13 +5,16 @@
 ![RoboVerse](docs/source/metasim/images/tea.jpg)
 
 
-[![](https://img.shields.io/badge/project-page-brightgreen)](https://roboverseorg.github.io)
-[![](https://img.shields.io/badge/paper-preprint-red)](https://roboverseorg.github.io/static/pdfs/roboverse.pdf)
-[![](https://img.shields.io/badge/doc-page-orange)](https://roboverse.wiki)
-[![](https://img.shields.io/github/issues/RoboVerseOrg/RoboVerse?color=yellow)](https://github.com/RoboVerseOrg/RoboVerse/issues)
-[![](https://img.shields.io/github/discussions/RoboVerseOrg/RoboVerse?color=blueviolet)](https://github.com/RoboVerseOrg/RoboVerse/discussions)
-[![](https://img.shields.io/discord/1356345436927168552?logo=discord&color=blue)](https://discord.gg/6e2CPVnAD3)
-[![](https://img.shields.io/badge/wechat-QR_code-green)](docs/source/_static/wechat.jpg)
+<p align="center">
+  <a href="https://roboverseorg.github.io"><img src="https://img.shields.io/badge/project-page-brightgreen" alt="Project Page"></a>
+  <a href="https://arxiv.org/abs/2504.18904"><img src="https://img.shields.io/badge/paper-preprint-red" alt="Paper"></a>
+  <a href="https://roboverse.wiki"><img src="https://img.shields.io/badge/doc-page-orange" alt="Documentation"></a>
+  <a href="https://github.com/RoboVerseOrg/RoboVerse/issues"><img src="https://img.shields.io/github/issues/RoboVerseOrg/RoboVerse?color=yellow" alt="Issues"></a>
+  <a href="https://github.com/RoboVerseOrg/RoboVerse/discussions"><img src="https://img.shields.io/github/discussions/RoboVerseOrg/RoboVerse?color=blueviolet" alt="Discussions"></a>
+  <a href="https://discord.gg/6e2CPVnAD3"><img src="https://img.shields.io/discord/1356345436927168552?logo=discord&color=blue" alt="Discord"></a>
+  <a href="docs/source/_static/wechat.jpg"><img src="https://img.shields.io/badge/wechat-QR_code-green" alt="WeChat"></a>
+</p>
+
 
 ## 💡 News
 - [2025-04-10] RoboVerse gets accepted by RSS 2025!
@@ -81,7 +84,3 @@ If you find RoboVerse useful, please consider citing it:
     url={https://github.com/RoboVerseOrg/RoboVerse},
 }
 ```
-
-## 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=RoboVerseOrg/RoboVerse&type=Timeline)](https://www.star-history.com/#RoboVerseOrg/RoboVerse&Timeline)

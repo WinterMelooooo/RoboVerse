@@ -19,7 +19,7 @@ def __get_quick_ref():
     from .fetch import FetchCloseBoxCfg
     from .gapartnet import GapartnetOpenDrawerCfg
     from .humanoidbench import StandCfg
-    from .isaacgym_envs.allegrohand_kuka_cfg import AllegroHandReorientationCfg
+    from .isaacgym_envs.allegrohand_reorientation_cfg import AllegroHandReorientationCfg
     from .isaacgym_envs.ant_isaacgym_cfg import AntIsaacGymCfg
     from .libero.libero_objects.libero_pick_alphabet_soup import LiberoPickAlphabetSoupCfg
     from .libero.libero_objects.libero_pick_bbq_sauce import LiberoPickBbqSauceCfg
@@ -39,6 +39,7 @@ def __get_quick_ref():
     from .rlbench.close_box_cfg import CloseBoxCfg
     from .robosuite import SquareD0Cfg, SquareD1Cfg, SquareD2Cfg, StackD0Cfg
     from .simpler_env.simpler_env_grasp_opened_coke_can_cfg import SimplerEnvGraspOpenedCokeCanCfg
+    from .simpler_env.simpler_env_move_near import SimplerEnvMoveNearCfg
 
     # from .skillblender import G1BaseTaskCfg, H1BaseTaskCfg
     from .uh1 import MabaoguoCfg

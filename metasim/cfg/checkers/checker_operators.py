@@ -1,3 +1,5 @@
+## ruff: noqa: D102
+
 from __future__ import annotations
 
 from dataclasses import MISSING
@@ -17,6 +19,8 @@ except:
 
 @configclass
 class AndOp(BaseChecker):
+    """Combine multiple checkers with a logical AND operation."""
+
     checkers: list[BaseChecker] = MISSING
 
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
@@ -24,7 +28,7 @@ class AndOp(BaseChecker):
             checker.reset(handler, env_ids=env_ids)
 
     def check(self, handler: BaseSimHandler) -> torch.BoolTensor:
-        success = torch.ones(handler.num_envs, dtype=torch.bool)
+        success = torch.ones(handler.num_envs, dtype=torch.bool, device=handler.device)
         for checker in self.checkers:
             success = success & checker.check(handler)
         return success
@@ -38,6 +42,8 @@ class AndOp(BaseChecker):
 
 @configclass
 class OrOp(BaseChecker):
+    """Combine multiple checkers with a logical OR operation."""
+
     checkers: list[BaseChecker] = MISSING
 
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
@@ -45,7 +51,7 @@ class OrOp(BaseChecker):
             checker.reset(handler, env_ids=env_ids)
 
     def check(self, handler: BaseSimHandler) -> torch.BoolTensor:
-        success = torch.zeros(handler.num_envs, dtype=torch.bool)
+        success = torch.zeros(handler.num_envs, dtype=torch.bool, device=handler.device)
         for checker in self.checkers:
             success = success | checker.check(handler)
         return success
@@ -59,6 +65,8 @@ class OrOp(BaseChecker):
 
 @configclass
 class NotOp(BaseChecker):
+    """Negate the result of a checker."""
+
     checker: BaseChecker = MISSING
 
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):

@@ -22,7 +22,6 @@ python roboverse_learn/algorithms/data2zarr_dp.py \
 --task_name <task_name> \
 --expert_data_num <expert_data_num> \
 --metadata_dir <metadata_dir> \
---custom_name <custom_name> \
 --action_space <action_space> \
 --observation_space <observation_space>
 ```
@@ -42,17 +41,17 @@ Command:
 ```shell
 python roboverse_learn/algorithms/diffusion_policy/train.py \
 --config-name=robot_dp.yaml \
---task.name=<task_name> \
---task.dataset.zarr_path=<zarr_path> \
---training.seed=<seed> \
---horizon=<horizon> \
---n_obs_steps=<n_obs_steps> \
---n_action_steps=<n_action_steps> \
---training.num_epochs=<num_epochs> \
---policy_runner.obs.obs_type=<obs_type> \
---policy_runner.action.action_type=<action_type> \
---policy_runner.action.delta=<delta> \
---training.device=<device>
+task.name=<task_name> \
+task.dataset.zarr_path=<zarr_path> \
+training.seed=<seed> \
+horizon=<horizon> \
+n_obs_steps=<n_obs_steps> \
+n_action_steps=<n_action_steps> \
+training.num_epochs=<num_epochs> \
+policy_runner.obs.obs_type=<obs_type> \
+policy_runner.action.action_type=<action_type> \
+policy_runner.action.delta=<delta> \
+training.device=<device>
 ```
 | Argument | Description | Example |
 |----------|-------------|---------|
@@ -89,7 +88,7 @@ bash roboverse_learn/algorithms/diffusion_policy/train_dp.sh <metadata_dir> <tas
 
 **Example:**
 ```shell
-bash roboverse_learn/algorithms/diffusion_policy/train.sh roboverse_demo/demo_isaaclab/CloseBox-Level0/robot-franka CloseBoxFrankaL0 100 0 200 joint_pos joint_pos
+bash roboverse_learn/algorithms/diffusion_policy/train_dp.sh roboverse_demo/demo_isaaclab/CloseBox-Level0/robot-franka CloseBoxFrankaL0 100 0 200 joint_pos joint_pos
 ```
 
 **Important Parameter Overrides:**
@@ -97,7 +96,7 @@ bash roboverse_learn/algorithms/diffusion_policy/train.sh roboverse_demo/demo_is
 - All other parameters (e.g., batch size, number of epochs) can be manually adjusted in the YAML file: `roboverse_learn/algorithms/diffusion_policy/diffusion_policy/config/robot_dp.yaml`
 - If you alter observation and action spaces, verify the corresponding shapes in: `roboverse_learn/algorithms/diffusion_policy/diffusion_policy/config/task/default_task.yaml` Both end effector control and Franka joint space, have dimension 9 but keep this in mind if using a different robot.
 
-#### Switching between Joint Position and End Effector Control
+### Switching between Joint Position and End Effector Control
 
 - **Joint Position Control**: Set both `obs_space` and `act_space` to `joint_pos`.
 - **End Effector Control**: Set both `obs_space` and `act_space` to `ee`. You may use `delta_ee=1` for delta mode or `delta_ee=0` for absolute positioning.

@@ -10,8 +10,16 @@ from metasim.utils import configclass
 class BaseActuatorCfg:
     velocity_limit: float | None = None  # TODO: None means use the default value (USD joint prim value) or no limit?
     is_ee: bool = False
-    damping: float = 40.0
-    stiffness: float = 400.0
+    damping: float | None = None
+    stiffness: float | None = None
+    torque_limit: float | None = None
+    actionable: bool = True
+    """Whether the actuator is actionable, i.e. can be driven by a motor.
+
+    Example:
+        Most actuators are actionable, but some are not, e.g. the "left_outer_finger_joint" and "right_outer_finger_joint" of the Robotiq 2F-85 gripper.
+        See https://docs.isaacsim.omniverse.nvidia.com/latest/robot_setup/rig_closed_loop_structures.html for more details.
+    """
 
 
 @configclass
@@ -26,6 +34,7 @@ class BaseRobotCfg(ArticulationObjCfg):
     joint_limits: dict[str, tuple[float, float]] = {}
     default_joint_positions: dict[str, float] = {}
     default_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    default_orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)  # w, x, y, z
     """
     Joint limits in the format of `{joint_name: (lower_limit, upper_limit)}`.
     Note that different simulators may have different order of joints, so you should not use the order in this dict!

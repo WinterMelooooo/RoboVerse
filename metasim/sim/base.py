@@ -3,9 +3,9 @@ from __future__ import annotations
 import torch
 from loguru import logger as log
 
-from metasim.cfg.objects import BaseObjCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.types import Action, EnvState, Extra, Obs, Reward, Success, TimeOut
+from metasim.utils.state import TensorState, state_tensor_to_nested
 
 
 class BaseSimHandler:
@@ -27,6 +27,7 @@ class BaseSimHandler:
         self.task = scenario.task
         self.robot = scenario.robot
         self.cameras = scenario.cameras
+        self.sensors = scenario.sensors
         self.objects = scenario.objects
         self.checker = scenario.checker
         self.object_dict = {obj.name: obj for obj in self.objects + [self.robot] + self.checker.get_debug_viewers()}
@@ -41,7 +42,7 @@ class BaseSimHandler:
     def step(self, action: list[Action]) -> tuple[Obs, Reward, Success, TimeOut, Extra]:
         raise NotImplementedError
 
-    def reset(self, env_ids: list[int] | None = None) -> tuple[Obs, Extra]:
+    def reset(self, env_ids: list[int] | None = None) -> tuple[TensorState, Extra]:
         """
         Reset the environment.
 
@@ -89,7 +90,12 @@ class BaseSimHandler:
             env_ids = list(range(self.num_envs))
 
         states = self.get_states(env_ids=env_ids)
-        return torch.stack([{**env_state["objects"], **env_state["robots"]}[obj_name]["vel"] for env_state in states])
+        if obj_name in states.objects:
+            return states.objects[obj_name].root_state[:, 7:10]
+        elif obj_name in states.robots:
+            return states.robots[obj_name].root_state[:, 7:10]
+        else:
+            raise ValueError(f"Object {obj_name} not found in states")
 
     def get_pos(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
         if self.num_envs > 1:
@@ -101,7 +107,12 @@ class BaseSimHandler:
             env_ids = list(range(self.num_envs))
 
         states = self.get_states(env_ids=env_ids)
-        return torch.stack([{**env_state["objects"], **env_state["robots"]}[obj_name]["pos"] for env_state in states])
+        if obj_name in states.objects:
+            return states.objects[obj_name].root_state[:, :3]
+        elif obj_name in states.robots:
+            return states.robots[obj_name].root_state[:, :3]
+        else:
+            raise ValueError(f"Object {obj_name} not found in states")
 
     def get_rot(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
         if self.num_envs > 1:
@@ -113,7 +124,12 @@ class BaseSimHandler:
             env_ids = list(range(self.num_envs))
 
         states = self.get_states(env_ids=env_ids)
-        return torch.stack([{**env_state["objects"], **env_state["robots"]}[obj_name]["rot"] for env_state in states])
+        if obj_name in states.objects:
+            return states.objects[obj_name].root_state[:, 3:7]
+        elif obj_name in states.robots:
+            return states.robots[obj_name].root_state[:, 3:7]
+        else:
+            raise ValueError(f"Object {obj_name} not found in states")
 
     def get_dof_pos(self, obj_name: str, joint_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
         if self.num_envs > 1:
@@ -125,6 +141,7 @@ class BaseSimHandler:
             env_ids = list(range(self.num_envs))
 
         states = self.get_states(env_ids=env_ids)
+        states = state_tensor_to_nested(self, states)
         return torch.tensor([
             {**env_state["objects"], **env_state["robots"]}[obj_name]["dof_pos"][joint_name] for env_state in states
         ])
@@ -141,22 +158,100 @@ class BaseSimHandler:
     def refresh_render(self) -> None:
         raise NotImplementedError
 
-    def get_observation(self) -> Obs:
-        raise NotImplementedError
-
     ############################################################
     ## Misc
     ############################################################
-    def get_object_joint_names(self, object: BaseObjCfg) -> list[str]:
-        """Get the joint names for a specified object in the order of the simulator default joint order.
+    def get_joint_names(self, obj_name: str, sort: bool = True) -> list[str]:
+        """Get the joint names for a given object.
+
+        Note:
+            Different simulators may have different joint order, but joint names should be the same.
 
         Args:
-            object (BaseObjCfg): The target object.
+            obj_name (str): The name of the object.
+            sort (bool): Whether to sort the joint names. Default is True. If True, the joint names are returned in alphabetical order. If False, the joint names are returned in the order defined by the simulator.
 
         Returns:
-            list[str]: A list of strings including the joint names. For non-articulation objects, return an empty list.
+            list[str]: A list of joint names. For non-articulation objects, return an empty list.
         """
         raise NotImplementedError
+
+    def get_joint_reindex(self, obj_name: str) -> list[int]:
+        """Get the reindexing order for joint indices of a given object. The returned indices can be used to reorder the joints such that they are sorted alphabetically by their names.
+
+        Args:
+            obj_name (str): The name of the object.
+
+        Returns:
+            list[int]: A list of joint indices that specifies the order to sort the joints alphabetically by their names.
+               The length of the list matches the number of joints.
+
+        Example:
+            Suppose ``obj_name = "h1"``, and the ``h1`` has joints:
+
+            index 0: ``"hip"``
+
+            index 1: ``"knee"``
+
+            index 2: ``"ankle"``
+
+            This function will return: ``[2, 0, 1]``, which corresponds to the alphabetical order:
+                ``"ankle"``, ``"hip"``, ``"knee"``.
+        """
+        if not hasattr(self, "_joint_reindex_cache"):
+            self._joint_reindex_cache = {}
+
+        if obj_name not in self._joint_reindex_cache:
+            origin_joint_names = self.get_joint_names(obj_name, sort=False)
+            sorted_joint_names = self.get_joint_names(obj_name, sort=True)
+            self._joint_reindex_cache[obj_name] = [origin_joint_names.index(jn) for jn in sorted_joint_names]
+
+        return self._joint_reindex_cache[obj_name]
+
+    def get_body_names(self, obj_name: str, sort: bool = True) -> list[str]:
+        """Get the body names for a given object.
+
+        Note:
+            Different simulators may have different body order, but body names should be the same.
+
+        Args:
+            obj_name (str): The name of the object.
+            sort (bool): Whether to sort the body names. Default is True. If True, the body names are returned in alphabetical order. If False, the body names are returned in the order defined by the simulator.
+
+        Returns:
+            list[str]: A list of body names. For non-articulation objects, return an empty list.
+        """
+        raise NotImplementedError
+
+    def get_body_reindex(self, obj_name: str) -> list[int]:
+        """Get the reindexing order for body indices of a given object. The returned indices can be used to reorder the bodies such that they are sorted alphabetically by their names.
+
+        Args:
+            obj_name (str): The name of the object.
+
+        Returns:
+            list[int]: A list of body indices that specifies the order to sort the bodies alphabetically by their names.
+               The length of the list matches the number of bodies.
+
+        Example:
+            Suppose ``obj_name = "h1"``, and the ``h1`` has the following bodies:
+
+                - index 0: ``"torso"``
+                - index 1: ``"left_leg"``
+                - index 2: ``"right_leg"``
+
+            This function will return: ``[1, 2, 0]``, which corresponds to the alphabetical order:
+                ``"left_leg"``, ``"right_leg"``, ``"torso"``.
+        """
+        if not hasattr(self, "_body_reindex_cache"):
+            self._body_reindex_cache = {}
+
+        if obj_name not in self._body_reindex_cache:
+            origin_body_names = self.get_body_names(obj_name, sort=False)
+            sorted_body_names = self.get_body_names(obj_name, sort=True)
+            self._body_reindex_cache[obj_name] = [origin_body_names.index(bn) for bn in sorted_body_names]
+
+        return self._body_reindex_cache[obj_name]
 
     @property
     def num_envs(self) -> int:
@@ -174,4 +269,8 @@ class BaseSimHandler:
         """
         Cache of actions.
         """
+        raise NotImplementedError
+
+    @property
+    def device(self) -> torch.device:
         raise NotImplementedError

@@ -16,22 +16,22 @@ class FrankaCfg(BaseRobotCfg):
     name: str = "franka"
     num_joints: int = 9
     fix_base_link: bool = True
-    usd_path: str = "metasim/data/quick_start/robots/franka/usd/franka_v2.usd"
-    mjcf_path: str = "metasim/data/quick_start/robots/franka/mjcf/panda.xml"
+    usd_path: str = "roboverse_data/robots/franka/usd/franka_v2.usd"
+    mjcf_path: str = "roboverse_data/robots/franka/mjcf/panda.xml"
     # urdf_path: str = "roboverse_data/robots/franka/urdf/panda.urdf"  # work for pybullet and sapien
-    urdf_path: str = "metasim/data/quick_start/robots/franka/urdf/franka_panda.urdf"  # work for isaacgym
+    urdf_path: str = "roboverse_data/robots/franka/urdf/franka_panda.urdf"  # work for isaacgym
     enabled_gravity: bool = False
     enabled_self_collisions: bool = False
     actuators: dict[str, BaseActuatorCfg] = {
-        "panda_joint1": BaseActuatorCfg(velocity_limit=2.175),
-        "panda_joint2": BaseActuatorCfg(velocity_limit=2.175),
-        "panda_joint3": BaseActuatorCfg(velocity_limit=2.175),
-        "panda_joint4": BaseActuatorCfg(velocity_limit=2.175),
-        "panda_joint5": BaseActuatorCfg(velocity_limit=2.61),
-        "panda_joint6": BaseActuatorCfg(velocity_limit=2.61),
-        "panda_joint7": BaseActuatorCfg(velocity_limit=2.61),
-        "panda_finger_joint1": BaseActuatorCfg(velocity_limit=0.2, is_ee=True),
-        "panda_finger_joint2": BaseActuatorCfg(velocity_limit=0.2, is_ee=True),
+        "panda_joint1": BaseActuatorCfg(stiffness=1e5, damping=1e4, velocity_limit=2.175),
+        "panda_joint2": BaseActuatorCfg(stiffness=1e4, damping=1e3, velocity_limit=2.175),
+        "panda_joint3": BaseActuatorCfg(stiffness=1e5, damping=5e3, velocity_limit=2.175),
+        "panda_joint4": BaseActuatorCfg(stiffness=1e5, damping=1e4, velocity_limit=2.175),
+        "panda_joint5": BaseActuatorCfg(stiffness=400, damping=50, velocity_limit=2.61),
+        "panda_joint6": BaseActuatorCfg(stiffness=250, damping=50, velocity_limit=2.61),
+        "panda_joint7": BaseActuatorCfg(stiffness=800, damping=50, velocity_limit=2.61),
+        "panda_finger_joint1": BaseActuatorCfg(stiffness=1000, damping=100, velocity_limit=0.2, is_ee=True),
+        "panda_finger_joint2": BaseActuatorCfg(stiffness=1000, damping=100, velocity_limit=0.2, is_ee=True),
     }
     joint_limits: dict[str, tuple[float, float]] = {
         "panda_joint1": (-2.8973, 2.8973),
@@ -48,14 +48,14 @@ class FrankaCfg(BaseRobotCfg):
 
     default_joint_positions: dict[str, float] = {
         "panda_joint1": 0.0,
-        "panda_joint2": 0.0,
+        "panda_joint2": -0.785398,
         "panda_joint3": 0.0,
-        "panda_joint4": 0.0,
+        "panda_joint4": -2.356194,
         "panda_joint5": 0.0,
-        "panda_joint6": 0.0,
-        "panda_joint7": 0.0,
-        "panda_finger_joint1": 0.0,
-        "panda_finger_joint2": 0.0,
+        "panda_joint6": 1.570796,
+        "panda_joint7": 0.785398,
+        "panda_finger_joint1": 0.04,
+        "panda_finger_joint2": 0.04,
     }
 
     # TODO: Make it more elegant

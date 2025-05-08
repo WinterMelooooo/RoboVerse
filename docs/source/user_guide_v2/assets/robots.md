@@ -1,1 +1,0 @@
-# Robots in RoboVerse

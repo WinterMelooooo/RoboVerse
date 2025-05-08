@@ -19,15 +19,10 @@ class BaseObjCfg:
 
     name: str = MISSING
     """Object name"""
-    fix_base_link: bool = False
-    """Whether to fix the base link of the object, default is False"""
-    scale: float | tuple[float, float, float] = 1.0
-    """Object scaling (in scalar) for the object, default is 1.0"""
-
-    def __post_init__(self):
-        """Transform the 1d scale to a tuple of (x-scale, y-scale, z-scale)."""
-        if isinstance(self.scale, float):
-            self.scale = (self.scale, self.scale, self.scale)
+    default_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """Default position of the object, default is (0.0, 0.0, 0.0)"""
+    default_orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)  # w, x, y, z
+    """Default orientation of the object, default is (1.0, 0.0, 0.0, 0.0)"""
 
 
 # File-based object
@@ -52,10 +47,15 @@ class RigidObjCfg(BaseObjCfg):
     mesh_path: str | None = None
     collision_enabled: bool = True
     physics: PhysicStateType | None = None
+    fix_base_link: bool = False
+    """Whether to fix the base link of the object, default is False"""
+    scale: float | tuple[float, float, float] = 1.0
+    """Object scaling (in scalar) for the object, default is 1.0"""
 
     def __post_init__(self):
-        """Parse the physics state to the enabled and fix_base_link."""
         super().__post_init__()
+
+        ## Parse the physics state to the enabled and fix_base_link.
         if self.physics is not None:
             if self.physics == PhysicStateType.XFORM:
                 self.collision_enabled = False
@@ -68,6 +68,10 @@ class RigidObjCfg(BaseObjCfg):
                 self.fix_base_link = False
             else:
                 raise ValueError(f"Invalid physics type: {self.physics}")
+
+        ## Transform the 1d scale to a tuple of (x-scale, y-scale, z-scale).
+        if isinstance(self.scale, float):
+            self.scale = (self.scale, self.scale, self.scale)
 
 
 @configclass
@@ -84,26 +88,32 @@ class ArticulationObjCfg(BaseObjCfg):
     usd_path: str | None = None
     urdf_path: str | None = None
     mjcf_path: str | None = None
+    fix_base_link: bool = False
+    """Whether to fix the base link of the object, default is False"""
+    scale: float | tuple[float, float, float] = 1.0
+    """Object scaling (in scalar) for the object, default is 1.0"""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        ## Transform the 1d scale to a tuple of (x-scale, y-scale, z-scale).
+        if isinstance(self.scale, float):
+            self.scale = (self.scale, self.scale, self.scale)
 
 
 # Primitive object are all rigid objects
 @configclass
 class PrimitiveCubeCfg(RigidObjCfg):
-    """Primitive cube object cfg.
-
-    This class specifies configuration parameters of a primitive cube.
-
-    Attributes:
-        mass: Mass of the object, in kg, default is 0.1
-        color: Color of the object in RGB
-        size: Size of the object, extent in m
-    """
+    """Primitive cube object cfg."""
 
     mass: float = 0.1
+    """Mass of the object (in kg), default is 0.1 kg"""
     color: list[float] = MISSING
+    """Color of the object in RGB"""
     size: list[float] = MISSING
+    """Size of the object (in m)"""
     physics: PhysicStateType = MISSING
-    mjcf_path: str | None = None  # TODO: remove this field
+    """Physics state of the object"""
 
     @property
     def half_size(self) -> list[float]:
@@ -129,6 +139,22 @@ class PrimitiveSphereCfg(RigidObjCfg):
     def density(self) -> float:
         """For SAPIEN usage."""
         return self.mass / (4 / 3 * math.pi * self.radius**3)
+
+
+@configclass
+class PrimitiveFrameCfg(RigidObjCfg):
+    """Primitive coordinate frame cfg."""
+
+    # TODO: This is object shouldn't inherit from RigidObjCfg?
+    name: str = MISSING
+    scale: float = 1.0
+    """Scale of the frame"""
+    base_link: str | tuple[str, str] | None = None
+    """Base link to attach the frame.
+        If ``None``, the frame will be attached to the world origin.
+        If a ``str``, the frame will be attached to the root link of the object specified by the name.
+        If a ``tuple[str, str]``, the frame will be attached to the object specified by the first str and the body link specified by the second str.
+    """
 
 
 @configclass

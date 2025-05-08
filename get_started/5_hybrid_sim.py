@@ -79,14 +79,12 @@ scenario.objects = [
         size=(0.1, 0.1, 0.1),
         color=[1.0, 0.0, 0.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/cube/cube.mjcf",
     ),
     PrimitiveSphereCfg(
         name="sphere",
         radius=0.1,
         color=[0.0, 0.0, 1.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/sphere/sphere.mjcf",
     ),
     RigidObjCfg(
         name="bbq_sauce",

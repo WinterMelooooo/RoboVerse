@@ -37,16 +37,14 @@ try:
 except ImportError:
     pass
 
-import rootutils
 import torch
 from curobo.types.math import Pose
 
-rootutils.setup_root(__file__, pythonpath=True)
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.constants import SimType
 from metasim.utils.kinematics_utils import get_curobo_models
-from metasim.utils.math import quat_apply, quat_from_euler_xyz, quat_invert
+from metasim.utils.math import quat_apply, quat_from_euler_xyz, quat_inv
 from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
 
 
@@ -68,7 +66,7 @@ def main():
         from isaacsim.core.prims import SingleXFormPrim as XFormPrim
 
     ## Reset
-    obs, extras = env.reset()
+    states, extras = env.reset()
 
     ## cuRobo controller
     if not args.js:
@@ -112,21 +110,15 @@ def main():
             ee_quat_target = quat_from_euler_xyz(ee_rot_target[..., 0], ee_rot_target[..., 1], ee_rot_target[..., 2])
 
             # Compute targets
-            curr_robot_q = torch.tensor([
-                [obs[env_id]["robots"][scenario.robot.name]["dof_pos"][jn] for jn in robot.joint_limits.keys()]
-                for env_id in range(num_envs)
-            ]).cuda()
-            robot_pos = torch.stack([
-                obs[env_id]["robots"][scenario.robot.name]["pos"] for env_id in range(num_envs)
-            ]).cuda()
-            robot_quat = torch.stack([
-                obs[env_id]["robots"][scenario.robot.name]["rot"] for env_id in range(num_envs)
-            ]).cuda()
+            reorder_idx = env.handler.get_joint_reindex(robot.name)
+            inverse_reorder_idx = [reorder_idx.index(i) for i in range(len(reorder_idx))]
+            curr_robot_q = states.robots[robot.name].joint_pos[:, inverse_reorder_idx]
+            robot_pos, robot_quat = states.robots[robot.name].root_state[0, :7].split([3, 4])
 
             if robot.name == "iiwa":
                 ee_pos_target = torch.distributions.Uniform(-0.5, 0.5).sample((num_envs, 3)).to("cuda:0")
                 ee_pos_target[:, 2] += 0.5
-            elif robot.name == "franka":
+            elif robot.name == "franka" or robot.name == "kinova_gen3_robotiq_2f85":
                 ee_pos_target = torch.distributions.Uniform(-0.5, 0.5).sample((num_envs, 3)).to("cuda:0")
                 ee_pos_target[:, 2] += 0.5
             elif robot.name == "sawyer":
@@ -142,7 +134,7 @@ def main():
                 raise ValueError(f"Unsupported robot: {robot.name}")
 
             target_prim = XFormPrim("/World/envs/env_0/target", name="target")
-            target_prim.set_world_pose(position=quat_apply(quat_invert(robot_quat), ee_pos_target) + robot_pos)
+            target_prim.set_world_pose(position=quat_apply(quat_inv(robot_quat), ee_pos_target) + robot_pos)
 
             # Solve IK
             seed_config = curr_robot_q[:, :curobo_n_dof].unsqueeze(1).tile([1, robot_ik._num_seeds, 1])
@@ -169,7 +161,7 @@ def main():
             env.handler.refresh_render()
         step += 1
 
-        obs = env.handler.get_states()
+        states = env.handler.get_states()
 
     env.handler.close()
 

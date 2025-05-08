@@ -1,3 +1,5 @@
+## ruff: noqa: D102
+
 from __future__ import annotations
 
 from dataclasses import MISSING
@@ -19,46 +21,60 @@ except:
 
 @configclass
 class BaseDetector:
+    """Base class for all detectors. Detectors are used to detect whether the object is inside the detector."""
+
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
+        """The code to run when the environment is reset."""
         raise NotImplementedError
 
     def is_detected(self, handler: BaseSimHandler, obj_name: str) -> torch.BoolTensor:
+        """Check if the object is inside the detector."""
         raise NotImplementedError
 
     def get_debug_viewers(self) -> list[BaseObjCfg]:
+        """Get the viewers to be used for debugging the detector."""
         raise NotImplementedError
 
 
 @configclass
 class RelativeBboxDetector(BaseDetector):
-    """
-    Check if the object is in the bounding box detector
+    """Check if the object is in the bounding box detector.
+
     - The bbox detector is defined by `relative_pos` and `relative_quat` to the base object specified by `base_obj_name`
     - The bbox size is defined by `checker_lower` and `checker_upper`
-    - If `ignore_base_ori` is True, the base object orientation is ignored
+    - If `ignore_base_ori` is True, the base object orientation is ignored.
     """
 
     base_obj_name: str = MISSING
+    """The name of the base object."""
     relative_pos: tuple[float, float, float] = MISSING
+    """The relative position (x, y, z) (in m) of the bbox detector to the base object."""
     relative_quat: tuple[float, float, float, float] = MISSING
+    """The relative rotation (w, x, y, z) of the bbox detector to the base object."""
     checker_lower: tuple[float, float, float] = MISSING
+    """The lower threshold (x, y, z) (in m) of the bbox detector."""
     checker_upper: tuple[float, float, float] = MISSING
+    """The upper threshold (x, y, z) (in m) of the bbox detector."""
     ignore_base_ori: bool = False
+    """If True, the base object orientation is ignored, so the ``relative_quat`` becomes the absolute rotation of the bbox detector."""
     debug_vis: bool = False
-    """Visualize the bounding box. Only supported with IsaacLab."""
+    """Visualize the bbox detector. Only supported with IsaacLab for now."""
     name: str = "bbox_detector"  # TODO: This is used for obj meta cfg name, need to handle multiple detectors
+    """The name of the bbox detector."""
     fixed: bool = True
-    """The pose of the bounding box is fixed once reset. Otherwise, it will be updated every step in correspond to the base object. Default to True."""
+    """The pose of the bbox detector is fixed once reset. Otherwise, it will be updated every step in correspond to the base object. Default to True."""
 
     def _update_checker(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
         if env_ids is None:
             env_ids = list(range(handler.num_envs))
 
-        relative_rot_mat = matrix_from_quat(torch.tensor(self.relative_quat, dtype=torch.float32))  # [3, 3]
-        relative_pos = torch.tensor(self.relative_pos, dtype=torch.float32)  # [3]
+        relative_rot_mat = matrix_from_quat(
+            torch.tensor(self.relative_quat, dtype=torch.float32, device=handler.device)
+        )  # [3, 3]
+        relative_pos = torch.tensor(self.relative_pos, dtype=torch.float32, device=handler.device)  # [3]
         base_pos = handler.get_pos(self.base_obj_name, env_ids=env_ids)
         if self.ignore_base_ori:
-            base_quat = torch.zeros((len(env_ids), 4), dtype=torch.float32)
+            base_quat = torch.zeros((len(env_ids), 4), dtype=torch.float32, device=handler.device)
             base_quat[:, 0] = 1.0
         else:
             base_quat = handler.get_rot(self.base_obj_name, env_ids=env_ids)
@@ -67,11 +83,11 @@ class RelativeBboxDetector(BaseDetector):
         checker_rot_mat = torch.matmul(base_rot_mat, relative_rot_mat)  # [n_env, 3, 3]
 
         if not hasattr(self, "checker_pos"):
-            self.checker_pos = torch.zeros((handler.num_envs, 3), dtype=torch.float32)
+            self.checker_pos = torch.zeros((handler.num_envs, 3), dtype=torch.float32, device=handler.device)
         if not hasattr(self, "checker_rot_mat"):
-            self.checker_rot_mat = torch.zeros((handler.num_envs, 3, 3), dtype=torch.float32)
+            self.checker_rot_mat = torch.zeros((handler.num_envs, 3, 3), dtype=torch.float32, device=handler.device)
         if not hasattr(self, "checker_quat"):
-            self.checker_quat = torch.zeros((handler.num_envs, 4), dtype=torch.float32)
+            self.checker_quat = torch.zeros((handler.num_envs, 4), dtype=torch.float32, device=handler.device)
 
         self.checker_pos[env_ids] = checker_pos
         self.checker_rot_mat[env_ids] = checker_rot_mat
@@ -82,8 +98,8 @@ class RelativeBboxDetector(BaseDetector):
             env_ids = list(range(handler.num_envs))
         self._update_checker(handler, env_ids)
 
-        self.checker_lower = torch.tensor(self.checker_lower, dtype=torch.float32)
-        self.checker_upper = torch.tensor(self.checker_upper, dtype=torch.float32)
+        self.checker_lower = torch.tensor(self.checker_lower, dtype=torch.float32, device=handler.device)
+        self.checker_upper = torch.tensor(self.checker_upper, dtype=torch.float32, device=handler.device)
 
         ## Reset debug viewer
         self.reset_debug_viewer(handler, env_ids)
@@ -132,13 +148,27 @@ class RelativeBboxDetector(BaseDetector):
             handler.set_pose(self.name, pos, rot)
 
 
+## FIXME: this detector is actually used in very hacky way, we should remove it!
+# Its functionality should be implemented by a `RelativeCylinderDetector` instead
 @configclass
 class Relative2DSphereDetector(BaseDetector):
+    """Detect whether the object is in a 2D sphere region.
+
+    - The detector position is defined by `relative_pos` to the base object specified by `base_obj_name`
+    - The region size is defined by `radius`
+    - The axis which the detector is along is defined by `axis`
+    """
+
     base_obj_name: str = MISSING
+    """The name of the base object."""
     relative_pos: tuple[float, float, float] = MISSING
-    aixs: tuple[int, int] = MISSING
+    """The relative position (x, y, z) (in m) of the 2D sphere detector to the base object."""
+    axis: tuple[int, int] = MISSING
+    """The axis which the detector is along."""
     radius: float = MISSING
+    """The radius of the 2D sphere detector."""
     debug_vis: bool = False
+    """Visualize the 2D sphere detector. Not supported for now."""
 
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
         if env_ids is None:
@@ -154,7 +184,7 @@ class Relative2DSphereDetector(BaseDetector):
         obj_pos = handler.get_pos(obj_name)
 
         object_in_checker = (
-            torch.norm(obj_pos[:, self.aixs] - self.checker_pos[:, self.aixs], p=2, dim=-1) < self.radius
+            torch.norm(obj_pos[:, self.axis] - self.checker_pos[:, self.axis], p=2, dim=-1) < self.radius
         )
         if object_in_checker.shape[0] != handler.num_envs:
             raise ValueError(
@@ -169,10 +199,20 @@ class Relative2DSphereDetector(BaseDetector):
 
 @configclass
 class Relative3DSphereDetector(BaseDetector):
+    """Detect whether the object is in a 3D sphere region.
+
+    - The detector position is defined by `relative_pos` to the base object specified by `base_obj_name`
+    - The region size is defined by `radius`
+    """
+
     base_obj_name: str = MISSING
+    """The name of the base object."""
     relative_pos: tuple[float, float, float] = MISSING
+    """The relative position (x, y, z) (in m) of the 3D sphere detector to the base object."""
     radius: float = MISSING
+    """The radius (in m) of the 3D sphere detector."""
     debug_vis: bool = False
+    """Visualize the 3D sphere detector. Not supported for now."""
 
     def reset(self, handler: BaseSimHandler, env_ids: list[int] | None = None):
         if env_ids is None:
