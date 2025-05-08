@@ -12,6 +12,8 @@ shape_meta: &shape_meta
   action:
     shape: [9]
   goal:
+    task_emb:
+      shape: [512]
 
 env_runner:
   _target_: diffusion_policy.env_runner.pusht_image_runner.PushTImageRunner
@@ -40,6 +42,7 @@ dataset:
   val_ratio: 0.02
   batch_size: 32
   max_train_episodes: null
+  task_name: ${task.name}
   transform_pcd:
     - _target_: roboverse_learn.algorithms.utils.transformpcd.GridSamplePCD
       grid_size: 0.005

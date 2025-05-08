@@ -295,6 +295,8 @@ class RobotWorkspace(BaseWorkspace):
                     # sample trajectory from training set, and evaluate difference
                     batch = train_sampling_batch
                     obs_dict = copy.deepcopy(batch["obs"])
+                    if "goal" in batch:
+                        obs_dict = copy.deepcopy(batch)
                     # print("obs_dict:", obs_dict)
                     # print("dict_keys:", obs_dict.keys())
                     # print("dict_items:", obs_dict.items())

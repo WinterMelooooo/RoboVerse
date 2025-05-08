@@ -38,7 +38,6 @@ class spUnetPcdPolicy(BaseImagePolicy):
         **kwargs,
     ):
         super().__init__()
-
         # parse shapes
         action_shape = shape_meta["action"]["shape"]
         assert len(action_shape) == 1
@@ -52,7 +51,6 @@ class spUnetPcdPolicy(BaseImagePolicy):
         if obs_as_global_cond:
             input_dim = action_dim
             global_cond_dim = obs_feature_dim * n_obs_steps
-
         if shape_meta.get("goal") is not None and "task_emb" in shape_meta["goal"]:
             # language goal
             # cond_dim = cond_dim + shape_meta["goal"]["task_emb"]["shape"][0]

@@ -3,6 +3,7 @@ import os
 import sys
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List
+import clip
 
 import numba
 import numpy as np
@@ -26,11 +27,25 @@ from torch.utils.data import default_collate
 sys.path.append(".")
 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
 
+VARIATION_DESCRIPTION = {
+    "CloseBox": ['close box',
+                'close the lid on the box',
+                'shut the box',
+                'shut the box lid'],
+}
+def get_task_name(task_name):
+    for name in VARIATION_DESCRIPTION.keys():
+        if task_name in name or name in task_name:
+            return name
+    raise ValueError(
+        f"task_name {task_name} not in {list(VARIATION_DESCRIPTION.keys())}"
+    )
 
 class RobotPointCloudDataset(BaseImageDataset):
     def __init__(
         self,
         zarr_path,
+        task_name,
         horizon=1,
         pad_before=0,
         pad_after=0,
@@ -45,6 +60,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         super().__init__()
         # cprint(zarr_path, "red")
         # cprint(batch_size, "red")
+        task_name = get_task_name(task_name)
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path,
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
@@ -90,6 +106,16 @@ class RobotPointCloudDataset(BaseImageDataset):
             v.pin_memory()
 
         self.transform_pcd = ComposePCD(transform_pcd)
+        clip_model = "ViT-B/16"
+        clip_model, _ = clip.load(
+            clip_model, device="cuda", download_root=os.path.expanduser("~/yktang/.cache/clip")
+        )
+        clip_model.requires_grad_(False)
+        clip_model.eval()
+        description_token = clip.tokenize(VARIATION_DESCRIPTION[task_name][0]).to("cuda")
+        task_goal = clip_model.encode_text(description_token).cpu().numpy()
+        self.task_goal = dict(task_emb=task_goal.reshape(-1))
+        print(f"Successfully encoded task goal: {VARIATION_DESCRIPTION[task_name]}")
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)
@@ -190,18 +216,18 @@ class RobotPointCloudDataset(BaseImageDataset):
             data["obs"]["pcds"], []
         )  # list of dict, length = B * n_obs_steps
 
-        # 2. 调用 point_collate_fn，把所有的点云 dict 拼成一个整体 batch
         collated = point_collate_fn(flat_pcds)
-        # collated 会是类似：
         # {
         #   'coord': Tensor[M,3],
-        #   'grid_coord': Tensor[M,3],      # 如果有的话
+        #   'grid_coord': Tensor[M,3],
         #   'feat': Tensor[M,F],
         #   'offset': Tensor[B*n_obs_steps]
         # }
 
-        # 3. 覆盖原来的 pcds 字段
         data["obs"]["pcds"] = collated
+        goal_list = [self.task_goal] * B
+        # collate 后得到 {'task_emb': Tensor(B, C)}
+        data["goal"] = default_collate(goal_list)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data
 

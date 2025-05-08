@@ -89,14 +89,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 32
+  batch_size: 64
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 32
+  batch_size: 64
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -104,7 +104,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1.0e-4
+  lr: 2.0e-4
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
