@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
+import gymnasium as gym
 import torch
 from loguru import logger as log
 
@@ -56,6 +57,20 @@ def IdentityEnvWrapper(cls: type[BaseSimHandler]) -> type[EnvWrapper[BaseSimHand
         def episode_length_buf(self) -> list[int]:
             return self.handler.episode_length_buf
 
+        @property
+        def observation_space(self) -> gym.Space:
+            return self.handler.scenario.task.observation_space
+
+        @property
+        def action_space(self) -> gym.Space:
+            action_low = torch.tensor(
+                [limit[0] for limit in self.handler.scenario.robot.joint_limits.values()], dtype=torch.float32
+            )
+            action_high = torch.tensor(
+                [limit[1] for limit in self.handler.scenario.robot.joint_limits.values()], dtype=torch.float32
+            )
+            return gym.spaces.Box(low=action_low, high=action_high, shape=(len(action_low),), dtype=torch.float32)
+
     return IdentityEnv
 
 
@@ -75,6 +90,9 @@ def GymEnvWrapper(cls: type[THandler]) -> type[EnvWrapper[THandler]]:
             self._episode_length_buf[env_ids] = 0
             if states is not None:
                 self.handler.set_states(states, env_ids=env_ids)
+            if self.handler.scenario.sim in ["mujoco", "isaacgym"]:
+                ## HACK
+                self.handler.simulate()
             self.handler.checker.reset(self.handler, env_ids=env_ids)
             self.handler.refresh_render()
             states = self.handler.get_states()
@@ -84,7 +102,7 @@ def GymEnvWrapper(cls: type[THandler]) -> type[EnvWrapper[THandler]]:
             self._episode_length_buf += 1
             self.handler.set_dof_targets(self.handler.robot.name, actions)
             self.handler.simulate()
-            reward = self._get_reward()
+            reward = None
             success = self.handler.checker.check(self.handler)
             states = self.handler.get_states()
             time_out = self._episode_length_buf >= self.handler.scenario.episode_length
@@ -108,5 +126,31 @@ def GymEnvWrapper(cls: type[THandler]) -> type[EnvWrapper[THandler]]:
         @property
         def episode_length_buf(self) -> list[int]:
             return self._episode_length_buf.tolist()
+
+        @property
+        def action_space(self) -> gym.Space:
+            action_low = torch.tensor(
+                [limit[0] for limit in self.handler.scenario.robot.joint_limits.values()], dtype=torch.float32
+            )
+            action_high = torch.tensor(
+                [limit[1] for limit in self.handler.scenario.robot.joint_limits.values()], dtype=torch.float32
+            )
+            return gym.spaces.Box(low=action_low, high=action_high, shape=(len(action_low),), dtype=torch.float32)
+
+        @property
+        def observation_space(self) -> gym.Space:
+            observation_space = {}
+            for obj in self.handler.scenario.task.observation_space.keys():
+                if obj == "robot":
+                    for joint in self.handler.scenario.robot.joint_names:
+                        observation_space[joint] = gym.spaces.Box(
+                            low=-torch.inf, high=torch.inf, shape=(1,), dtype=torch.float32
+                        )
+                else:
+                    for key, value in self.handler.scenario.task.observation_space[obj].items():
+                        observation_space[obj][key] = gym.spaces.Box(
+                            low=value["low"], high=value["high"], shape=value["shape"], dtype=value["dtype"]
+                        )
+            return gym.spaces.Dict(observation_space)
 
     return GymEnv

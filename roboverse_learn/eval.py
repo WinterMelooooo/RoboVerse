@@ -20,7 +20,6 @@ from rich.logging import RichHandler
 
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-import torch
 
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.scenario import ScenarioCfg
@@ -77,7 +76,9 @@ class Args:
 
     def __post_init__(self):
         if self.random.table and not self.table:
-            log.warning("Cannot enable table randomization without a table, disabling table randomization")
+            log.warning(
+                "Cannot enable table randomization without a table, disabling table randomization"
+            )
             self.random.table = False
         log.info(f"Args: {self}")
 
@@ -124,7 +125,9 @@ def main():
         task_name=args.task,
         subset=args.subset,
     )
-    action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
+    action_set_steps = (
+        2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
+    )
     if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
         try:
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
@@ -135,26 +138,36 @@ def main():
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
         use_wide_point_cloud = True if args.random.level >= 2 else False
         pnt_cloud_getter = PntCloudGetter(
-            args.task.split("_")[0], use_point_crop=True, use_wide_point_cloud=use_wide_point_cloud
+            args.task.split("_")[0],
+            use_point_crop=True,
+            use_wide_point_cloud=use_wide_point_cloud,
         )
+        '''
         temp_dict = {
             "cam_pos": [1.5, 0.0, 1.5],
             "cam_look_at": [0.0, 0.0, 0.0],
-            "cam_intr": torch.tensor([
-                [293.19970703125, 0.0, 128.0],
-                [0.0, 293.19970703125, 128.0],
-                [0.0, 0.0, 1.0],
-            ]).cpu(),
-            "cam_extr": torch.tensor([
-                [0.0, 1.0, -0.0, -0.0],
-                [0.7071067690849304, -0.0, -0.7071067690849304, -0.0],
-                [-0.7071068286895752, 0.0, -0.7071068286895752, 2.1213204860687256],
-                [0.0, 0.0, 0.0, 1.0],
-            ]).cpu(),
+            "cam_intr": torch.tensor(
+                [
+                    [293.19970703125, 0.0, 128.0],
+                    [0.0, 293.19970703125, 128.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            ).cpu(),
+            "cam_extr": torch.tensor(
+                [
+                    [0.0, 1.0, -0.0, -0.0],
+                    [0.7071067690849304, -0.0, -0.7071067690849304, -0.0],
+                    [-0.7071068286895752, 0.0, -0.7071068286895752, 2.1213204860687256],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            ).cpu(),
         }
+        '''
     ## Data
     tic = time.time()
-    assert os.path.exists(task.traj_filepath), f"Trajectory file: {task.traj_filepath} does not exist."
+    assert os.path.exists(task.traj_filepath), (
+        f"Trajectory file: {task.traj_filepath} does not exist."
+    )
     init_states, all_actions, all_states = get_traj(task, robot, env.handler)
     num_demos = len(init_states)
     toc = time.time()
@@ -167,7 +180,9 @@ def main():
     else:
         max_demos = args.max_demo
     max_demos = min(max_demos, num_demos)
-    for demo_start_idx in range(args.task_id_range_low, args.task_id_range_low + max_demos, num_envs):
+    for demo_start_idx in range(
+        args.task_id_range_low, args.task_id_range_low + max_demos, num_envs
+    ):
         demo_end_idx = min(demo_start_idx + num_envs, num_demos)
 
         ## Reset before first step
@@ -186,30 +201,30 @@ def main():
         while step < MaxStep:
             log.debug(f"Step {step}")
             new_obs = {
-                "rgb": torch.stack([env["cameras"]["camera0"]["rgb"] for env in obs]),
-                "joint_qpos": torch.tensor([
-                    [
-                        env["robots"][args.robot]["dof_pos"][k]
-                        for k in sorted(env["robots"][args.robot]["dof_pos"].keys())
-                    ]
-                    for env in obs
-                ]),
+                "rgb": obs.cameras["camera0"].rgb,
+                "joint_qpos": obs.robots[args.robot].joint_pos,
             }
             if "head_cam" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() and (
                 policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
-                or policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
+                or policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type
+                == "rgbd_resnet"
             ):
-                new_obs["depth"] = torch.stack([env["cameras"]["camera0"]["depth"] for env in obs])  # (50, 256, 256, 1)
-                assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
+                new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
+                assert new_obs["depth"].shape[3] == 1, (
+                    f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
+                )
             if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
-                depth = torch.stack([
-                    env["cameras"]["camera0"]["depth"] for env in obs
-                ])  # (50, 256, 256, 1) [near, far]
+                depth = obs.cameras["camera0"].depth
+                try:
+                    cam_intr = obs.cameras["camera0"].intr
+                    cam_extr = obs.cameras["camera0"].extr
+                except:
+                    print(
+                        f"obs.cameras['camera0'].keys(): {obs.cameras['camera0'].keys()}"
+                    )
+                    raise NotImplementedError()
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(
-                    new_obs["rgb"],
-                    depth,
-                    torch.stack([temp_dict["cam_intr"] for env in obs]),
-                    torch.stack([temp_dict["cam_extr"] for env in obs]),  # TODO:fix this
+                    new_obs["rgb"], depth, cam_intr, cam_extr
                 )
 
                 # idx = np.random.randint(0, pnt_cloud.shape[0])
@@ -250,7 +265,9 @@ def main():
                 f.write(f"SuccessOnce: {SuccessOnce[i]}\n")
                 f.write(f"SuccessEnd: {SuccessEnd[i]}\n")
                 f.write(f"TimeOut: {TimeOut[i]}\n")
-                f.write(f"Cumulative Average Success Rate: {total_success / total_completed}\n")
+                f.write(
+                    f"Cumulative Average Success Rate: {total_success / total_completed}\n"
+                )
         log.info("Demo Indices: ", range(demo_start_idx, demo_end_idx))
         log.info("Num Envs: ", num_envs)
         log.info(f"SuccessOnce: {SuccessOnce}")

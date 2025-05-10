@@ -12,8 +12,6 @@ except ImportError:
 
 import imageio as iio
 import numpy as np
-import rootutils
-import torch
 import tyro
 from loguru import logger as log
 from numpy.typing import NDArray
@@ -21,20 +19,19 @@ from rich.logging import RichHandler
 from torchvision.utils import make_grid, save_image
 from tyro import MISSING
 
-logging.addLevelName(5, "TRACE")
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-rootutils.setup_root(__file__, pythonpath=True)
-
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.render import RenderCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.constants import SimType
 from metasim.sim import HybridSimEnv
-from metasim.types import EnvState
 from metasim.utils import configclass
 from metasim.utils.demo_util import get_traj
 from metasim.utils.setup_util import get_sim_env_class
+from metasim.utils.state import TensorState
+
+logging.addLevelName(5, "TRACE")
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
@@ -108,23 +105,17 @@ class ObsSaver:
 
         self.image_idx = 0
 
-    def add(self, states: list[EnvState]):
+    def add(self, state: TensorState):
         """Add the observation to the list."""
         if self.image_dir is None and self.video_path is None:
             return
 
-        rgb_data_list = []
-        for state in states:
-            for camera_name, camera_data in state["cameras"].items():
-                if "rgb" in camera_data:
-                    rgb_data_list.append(camera_data["rgb"])
-                    continue
-
-        if not rgb_data_list:
+        try:
+            rgb_data = next(iter(state.cameras.values())).rgb
+            image = make_grid(rgb_data.permute(0, 3, 1, 2) / 255, nrow=int(rgb_data.shape[0] ** 0.5))  # (C, H, W)
+        except Exception as e:
+            log.error(f"Error adding observation: {e}")
             return
-
-        rgb_data = torch.stack(rgb_data_list, dim=0)
-        image = make_grid(rgb_data.permute(0, 3, 1, 2) / 255, nrow=int(rgb_data.shape[0] ** 0.5))  # (C, H, W)
 
         if self.image_dir is not None:
             os.makedirs(self.image_dir, exist_ok=True)
@@ -215,7 +206,7 @@ def main():
             states = get_states(all_states, step, num_envs)
             env.handler.set_states(states)
             env.handler.refresh_render()
-            obs = env.handler.get_observation()
+            obs = env.handler.get_states()
 
             ## XXX: hack
             success = env.handler.task.checker.check(env.handler)

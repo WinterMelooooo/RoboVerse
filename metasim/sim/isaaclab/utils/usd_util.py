@@ -11,7 +11,7 @@ from loguru import logger as log
 from omni.kit.material.library import get_material_prim_path
 from pxr import Gf, Sdf, Usd, UsdShade
 
-from metasim.utils.hf_util import check_and_download
+from metasim.utils.hf_util import check_and_download_recursive
 
 from .material_util import apply_mdl_to_prim
 
@@ -57,37 +57,35 @@ class ShaderFixer:
         shader_prim = shader.GetPrim()  # often == material_prim + '/Shader'
         log.debug(f"Trying to fix shader {shader_prim.GetPath()}")
 
-        attr = shader_prim.GetAttribute("inputs:diffuse_texture")
-        if not attr:
-            log.debug("No diffuse_texture attribute found for shader, skipping")
-            return
+        target_attrs = ["diffuse_texture", "opacity_texture"]
+        for attr_name in target_attrs:
+            attr = shader_prim.GetAttribute(f"inputs:{attr_name}")
+            if not attr:
+                log.debug(f"No {attr_name} attribute found for shader, skipping")
+                continue
 
-        texture_path = str(attr.Get()).replace("@", "")
-        if os.path.isabs(texture_path):
-            if os.path.exists(texture_path):
-                log.error(f"diffuse_texture path {texture_path} is absolute, please change to relative path!")
-                return
+            original_path = str(attr.Get()).replace("@", "")
+            if os.path.isabs(original_path):
+                if os.path.exists(original_path):
+                    log.error(f"{attr_name} path {original_path} is absolute, please change to relative path!")
+                else:
+                    log.error(
+                        f"{attr_name} path {original_path} is absolute and does not exist, please fix manually as"
+                        " relative path!"
+                    )
             else:
-                log.error(
-                    f"diffuse_texture path {texture_path} is absolute and does not exist, please fix manually as"
-                    " relative path!"
-                )
-                return
-        else:
-            usd_abs_path = os.path.abspath(self.usd_path)
-            texture_abs_path = os.path.join(os.path.dirname(usd_abs_path), texture_path)
-            if os.path.exists(texture_abs_path):
-                attr.Set(Sdf.AssetPath(texture_abs_path))
-                log.info(
-                    f"Fixing shader {shader_prim.GetPath()}, replace diffuse_texture path from {texture_path} to"
-                    f" {texture_abs_path}"
-                )
-            else:
-                log.error(
-                    f"diffuse_texture path {texture_abs_path} (parsed from {texture_path}) does not exist, please fix"
-                    " manually as relative path!"
-                )
-                return
+                usd_abs_path = os.path.abspath(self.usd_path)
+                abs_path = os.path.join(os.path.dirname(usd_abs_path), original_path)
+                if os.path.exists(abs_path):
+                    attr.Set(Sdf.AssetPath(abs_path))
+                    log.info(
+                        f"Fixing shader {shader_prim.GetPath()}, replace {attr_name} path from {original_path} to"
+                        f" {abs_path}"
+                    )
+                else:
+                    log.error(
+                        f"{attr_name} path {abs_path} (parsed from {original_path}) does not exist! If you are developer, please fix the path. If you are user, please report this issue."
+                    )
 
     def fix_all(self):
         for shader in self._find_unique_shaders():
@@ -208,7 +206,7 @@ class SceneRandomizer:
     def do_it(self):
         scene_cfg_cls = random.choice(self.scene_configs)
         scene_cfg = scene_cfg_cls()
-        check_and_download(scene_cfg.usd_path)
+        check_and_download_recursive([scene_cfg.usd_path])
         chosen_position = random.choice(scene_cfg.positions) if scene_cfg.positions else scene_cfg.default_position
 
         return {

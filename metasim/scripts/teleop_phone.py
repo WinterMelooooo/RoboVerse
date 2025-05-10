@@ -11,21 +11,17 @@ except ImportError:
     pass
 
 import numpy as np
-import rootutils
 import torch
 from curobo.types.math import Pose
 from loguru import logger as log
 from rich.logging import RichHandler
-
-rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.constants import SimType
 from metasim.utils.demo_util import get_traj
 from metasim.utils.kinematics_utils import get_curobo_models
-from metasim.utils.math import quat_apply, quat_invert
+from metasim.utils.math import quat_apply, quat_inv
 from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
 from metasim.utils.teleop_utils import (
     TRANSFORMATION_MATRIX,
@@ -33,6 +29,8 @@ from metasim.utils.teleop_utils import (
     quaternion_to_rotation_matrix,
     transform_orientation,
 )
+
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 def parse_args():
@@ -112,7 +110,7 @@ def main():
         robot_pos, robot_quat = robot_root_state[:, 0:3], robot_root_state[:, 3:7]
         curr_ee_pos, curr_ee_quat = robot_ee_state[:, 0:3], robot_ee_state[:, 3:7]
 
-        curr_ee_pos = quat_apply(quat_invert(robot_quat), curr_ee_pos - robot_pos)
+        curr_ee_pos = quat_apply(quat_inv(robot_quat), curr_ee_pos - robot_pos)
 
         ee_to_world_matpose = np.eye(4)
         ee_to_world_matpose[:3, :3] = quaternion_to_rotation_matrix(

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+try:
+    import isaacgym  # noqa: F401
+except ImportError:
+    pass
+
 import random
 from dataclasses import dataclass
+from typing import Literal
 
-import gymnasium as gym
 import numpy as np
-import rootutils
 import torch
 import tyro
 from gymnasium import spaces
@@ -15,21 +19,21 @@ from rich.logging import RichHandler
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecEnv
 
-rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
 from metasim.sim import BaseSimHandler, EnvWrapper
 from metasim.utils.demo_util import get_traj
 from metasim.utils.setup_util import get_sim_env_class
 
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
+
 
 @dataclass
 class Args(ScenarioCfg):
-    task: str = "reach_origin"
+    task: str = "debug:reach_origin"
     robot: str = "franka"
     num_envs: int = 16
+    sim: Literal["isaaclab", "isaacgym", "mujoco"] = "isaaclab"
 
 
 args = tyro.cli(Args)
@@ -41,7 +45,7 @@ class MetaSimVecEnv(VectorEnv):
     def __init__(
         self,
         scenario: ScenarioCfg | None = None,
-        sim_type: SimType = SimType.ISAACLAB,
+        sim: str = "isaaclab",
         task_name: str | None = None,
         num_envs: int | None = 4,
     ):
@@ -51,7 +55,7 @@ class MetaSimVecEnv(VectorEnv):
             scenario.num_envs = num_envs
             scenario = ScenarioCfg(**vars(scenario))
         self.num_envs = scenario.num_envs
-        env_class = get_sim_env_class(sim_type)
+        env_class = get_sim_env_class(SimType(sim))
         env = env_class(scenario)
         self.env: EnvWrapper[BaseSimHandler] = env
         self.render_mode = None  # XXX
@@ -61,14 +65,17 @@ class MetaSimVecEnv(VectorEnv):
         self.candidate_init_states, _, _ = get_traj(scenario.task, scenario.robot)
 
         # XXX: is the inf space ok?
-        super().__init__(self.num_envs, spaces.Box(-np.inf, np.inf), spaces.Box(-np.inf, np.inf))
+        self.single_observation_space = spaces.Box(-np.inf, np.inf)
+        self.single_action_space = spaces.Box(-np.inf, np.inf)
 
     ############################################################
     ## Gym-like interface
     ############################################################
-    def reset(self, seed: int | None = None):
+    def reset(self, env_ids: list[int] | None = None, seed: int | None = None):
+        if env_ids is None:
+            env_ids = list(range(self.num_envs))
         init_states = self.unwrapped._get_default_states(seed)
-        self.env.reset(states=init_states)
+        self.env.reset(states=init_states, env_ids=env_ids)
         return self.unwrapped._get_obs(), {}
 
     def step(self, actions: list[dict]):
@@ -91,24 +98,18 @@ class MetaSimVecEnv(VectorEnv):
         ## TODO: use torch instead of numpy
         """Get current observations for all environments"""
         states = self.env.handler.get_states()
-        states = [{**state["robots"], **state["objects"]} for state in states]  # XXX: compatible with old states format
-        joint_pos = torch.tensor([
-            [state[self.env.handler.robot.name]["dof_pos"][j] for j in self.env.handler.robot.joint_limits.keys()]
-            for state in states
-        ])
-
-        # Get end effector positions (assuming 'ee' is the end effector subpath)
-        ee_pos = torch.stack([state["metasim_body_panda_hand"]["pos"] for state in states])
+        joint_pos = states.robots["franka"].joint_pos
+        panda_hand_index = states.robots["franka"].body_names.index("panda_hand")
+        ee_pos = states.robots["franka"].body_state[:, panda_hand_index, :3]
 
         return torch.cat([joint_pos, ee_pos], dim=1)
 
     def _calculate_rewards(self):
         """Calculate rewards based on distance to origin"""
         states = self.env.handler.get_states()
-        states = [{**state["robots"], **state["objects"]} for state in states]  # XXX: compatible with old states format
-        tot_reward = torch.zeros(self.num_envs)
+        tot_reward = torch.zeros(self.num_envs, device=self.env.handler.device)
         for reward_fn, weight in zip(self.scenario.task.reward_functions, self.scenario.task.reward_weights):
-            tot_reward += weight * reward_fn(states)
+            tot_reward += weight * reward_fn(states, self.scenario.robot.name)
         return tot_reward
 
     def _get_default_states(self, seed: int | None = None):
@@ -146,7 +147,7 @@ class StableBaseline3VecEnv(VecEnv):
     ############################################################
     def reset(self):
         obs, _ = self.env.reset()
-        return obs.numpy()
+        return obs.cpu().numpy()
 
     def step_async(self, actions: np.ndarray) -> None:
         self.action_dicts = [
@@ -158,18 +159,17 @@ class StableBaseline3VecEnv(VecEnv):
 
         dones = success | timeout
         if dones.any():
-            init_states = self.env.unwrapped._get_default_states()
-            self.env.reset(states=init_states, env_ids=dones.nonzero().squeeze(-1).tolist())
+            self.env.reset(env_ids=dones.nonzero().squeeze(-1).tolist())
 
         extra = [{} for _ in range(self.num_envs)]
         for env_id in range(self.num_envs):
             if dones[env_id]:
-                extra[env_id]["terminal_observation"] = obs[env_id]
-            extra[env_id]["TimeLimit.truncated"] = timeout[env_id] and not success[env_id]
+                extra[env_id]["terminal_observation"] = obs[env_id].cpu().numpy()
+            extra[env_id]["TimeLimit.truncated"] = timeout[env_id].item() and not success[env_id].item()
 
         obs = self.env.unwrapped._get_obs()
 
-        return obs.numpy(), rewards.numpy(), dones.numpy(), extra
+        return obs.cpu().numpy(), rewards.cpu().numpy(), dones.cpu().numpy(), extra
 
     def render(self):
         return self.env.render()
@@ -200,11 +200,12 @@ class StableBaseline3VecEnv(VecEnv):
 
 def train_ppo():
     ## Choice 1: use scenario config to initialize the environment
-    # scenario = ScenarioCfg(**vars(args))
-    # metasim_env = MetaSimVecEnv(scenario)
+    scenario = ScenarioCfg(**vars(args))
+    scenario.cameras = []  # XXX: remove cameras to avoid rendering to speed up
+    metasim_env = MetaSimVecEnv(scenario, task_name=args.task, num_envs=args.num_envs, sim=args.sim)
 
     ## Choice 2: use gym.make to initialize the environment
-    metasim_env = gym.make("reach_origin", num_envs=args.num_envs)
+    # metasim_env = gym.make("reach_origin", num_envs=args.num_envs)
     env = StableBaseline3VecEnv(metasim_env)
 
     # PPO configuration

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
+import math
 import os
+from typing import Literal
 
 import rootutils
 import torch
@@ -73,14 +73,12 @@ scenario.objects = [
         size=(0.1, 0.1, 0.1),
         color=[1.0, 0.0, 0.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/cube/cube.mjcf",
     ),
     PrimitiveSphereCfg(
         name="sphere",
         radius=0.1,
         color=[0.0, 0.0, 1.0],
         physics=PhysicStateType.RIGIDBODY,
-        mjcf_path="get_started/example_assets/sphere/sphere.mjcf",
     ),
     RigidObjCfg(
         name="bbq_sauce",
@@ -141,6 +139,20 @@ init_states = [
                     "panda_finger_joint2": 0.04,
                 },
             },
+            "kinova_gen3_robotiq_2f85": {
+                "pos": torch.tensor([0.0, 0.0, 0.0]),
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                "dof_pos": {
+                    "joint_1": 0.0,
+                    "joint_2": math.pi / 6,
+                    "joint_3": 0.0,
+                    "joint_4": math.pi / 2,
+                    "joint_5": 0.0,
+                    "joint_6": 0.0,
+                    "joint_7": 0.0,
+                    "finger_joint": 0.0,
+                },
+            },
         },
     }
     for _ in range(args.num_envs)
@@ -165,29 +177,32 @@ robot_joint_limits = scenario.robot.joint_limits
 for step in range(200):
     log.debug(f"Step {step}")
     states = env.handler.get_states()
-    robot_states = [next(iter(s["robots"].values())) for s in states]
-    curr_robot_q = torch.tensor([[s["dof_pos"][jn] for jn in robot.actuators.keys()] for s in robot_states]).cuda()
+    curr_robot_q = states.robots[robot.name].joint_pos.cuda()
 
     seed_config = curr_robot_q[:, :curobo_n_dof].unsqueeze(1).tile([1, robot_ik._num_seeds, 1])
-    x_target = 0.3 + 0.1 * (step / 100)
-    y_target = 0.5 - 0.5 * (step / 100)
-    z_target = 0.6 - 0.2 * (step / 100)
-
-    # Randomly assign x/y/z target for each env
-
-    ee_pos_target = torch.zeros((args.num_envs, 3), device="cuda:0")
-    for i in range(args.num_envs):
-        if i % 3 == 0:
-            ee_pos_target[i] = torch.tensor([x_target, 0.0, 0.6], device="cuda:0")
-        elif i % 3 == 1:
-            ee_pos_target[i] = torch.tensor([0.3, y_target, 0.6], device="cuda:0")
-        else:
-            ee_pos_target[i] = torch.tensor([0.3, 0.0, z_target], device="cuda:0")
-
-    ee_quat_target = torch.tensor(
-        [[0.0, 1.0, 0.0, 0.0]] * args.num_envs,
-        device="cuda:0",
-    )
+    if scenario.robot.name == "franka":
+        x_target = 0.3 + 0.1 * (step / 100)
+        y_target = 0.5 - 0.5 * (step / 100)
+        z_target = 0.6 - 0.2 * (step / 100)
+        # Randomly assign x/y/z target for each env
+        ee_pos_target = torch.zeros((args.num_envs, 3), device="cuda:0")
+        for i in range(args.num_envs):
+            if i % 3 == 0:
+                ee_pos_target[i] = torch.tensor([x_target, 0.0, 0.6], device="cuda:0")
+            elif i % 3 == 1:
+                ee_pos_target[i] = torch.tensor([0.3, y_target, 0.6], device="cuda:0")
+            else:
+                ee_pos_target[i] = torch.tensor([0.3, 0.0, z_target], device="cuda:0")
+        ee_quat_target = torch.tensor(
+            [[0.0, 1.0, 0.0, 0.0]] * args.num_envs,
+            device="cuda:0",
+        )
+    elif scenario.robot.name == "kinova_gen3_robotiq_2f85":
+        ee_pos_target = torch.tensor([[0.2 + 0.2 * (step / 100), 0.0, 0.4]], device="cuda:0").repeat(args.num_envs, 1)
+        ee_quat_target = torch.tensor(
+            [[0.0, 0.0, 1.0, 0.0]] * args.num_envs,
+            device="cuda:0",
+        )
 
     result = robot_ik.solve_batch(Pose(ee_pos_target, ee_quat_target), seed_config=seed_config)
 
@@ -200,6 +215,11 @@ for step in range(200):
     ]
 
     obs, reward, success, time_out, extras = env.step(actions)
+
+    if step == 0:
+        for _ in range(50):
+            obs, _, _, _, _ = env.step(actions)
+
     obs_saver.add(obs)
     step += 1
 
