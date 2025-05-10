@@ -56,4 +56,5 @@ pnt_cloud = pnt_cloud_getter.get_point_cloud(
 )
 from roboverse_learn.algorithms.utils.visualizer import visualizer
 
+print(pnt_cloud.shape)
 visualizer.visualize_pointcloud(pnt_cloud)

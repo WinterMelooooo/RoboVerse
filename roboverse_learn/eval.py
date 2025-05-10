@@ -176,7 +176,7 @@ def main():
         policyRunner.reset()
         toc = time.time()
         log.trace(f"Time to reset: {toc - tic:.2f}s")
-
+        log.info(f"ckpt to eval: {args.checkpoint_path.split('/')[-3]}")
         step = 0
         MaxStep = args.max_step
         SuccessOnce = [False] * num_envs
@@ -215,7 +215,7 @@ def main():
                 # idx = np.random.randint(0, pnt_cloud.shape[0])
                 # torch.save(
                 #    pnt_cloud[idx],
-                #    f"tmp//pnt_cloud/pntcloud_eval_{idx}.npy",
+                #    f"tmp/visualize/eval/pntcloud_eval_{idx}.npy",
                 # )
                 # return
 
