@@ -237,6 +237,8 @@ def main():
                 # print(max(depth.flatten()), min(depth.flatten()), depth.shape, type(depth[0, 0]))
                 cam_intr = np.array(metadata["cam_intr"][i])
                 cam_extr = np.array(metadata["cam_extr"][i])
+                if not cam_intr.size or not cam_extr.size:
+                    print(f"Cam intr and extr are empty for episode {current_ep}, index {i}. Using default values.")
                 depth_min = metadata["depth_min"][i]
                 depth_max = metadata["depth_max"][i]
                 cam_intr = np.array(temp_dict["cam_intr"]) if not cam_intr.size else cam_intr

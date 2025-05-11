@@ -223,7 +223,6 @@ class RobotPointCloudDataset(BaseImageDataset):
         #   'feat': Tensor[M,F],
         #   'offset': Tensor[B*n_obs_steps]
         # }
-
         data["obs"]["pcds"] = collated
         goal_list = [self.task_goal] * B
         # collate 后得到 {'task_emb': Tensor(B, C)}

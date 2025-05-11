@@ -10,12 +10,6 @@ from roboverse_learn.algorithms.utils.pnt_cloud_generator import PointCloudGener
 
 DEBUG = False
 
-ADROIT_PC_TRANSFORM = np.array([
-    [1, 0, 0],
-    [0, np.cos(np.radians(45)), np.sin(np.radians(45))],
-    [0, -np.sin(np.radians(45)), np.cos(np.radians(45))],
-])
-
 ENV_POINT_CLOUD_CONFIG = {
     "CloseBox": {
         "min_bound": [

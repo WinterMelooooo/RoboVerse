@@ -123,6 +123,7 @@ class RobotWorkspace(BaseWorkspace):
         # configure ema
         ema: EMAModel = None
         if cfg.training.use_ema:
+            print("Using EMA model")
             ema = hydra.utils.instantiate(cfg.ema, model=self.ema_model)
 
         # configure env
@@ -258,6 +259,7 @@ class RobotWorkspace(BaseWorkspace):
             policy = model
             if cfg.training.use_ema:
                 policy = self.ema_model
+                print("Using EMA model for evaluation")
             policy.eval()
 
             # run rollout

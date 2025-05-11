@@ -263,7 +263,8 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
                 "depth": camera_state.depth[env_id].cpu(),
                 "pos": camera_state.pos[env_id].cpu(),
                 "quat_world": camera_state.quat_world[env_id].cpu(),
-                "intrinsics": camera_state.intrinsics[env_id].cpu(),
+                "cam_extr": camera_state.extrinsics[env_id].cpu(),
+                "cam_intr": camera_state.intrinsics[env_id].cpu(),
             }
 
         env_state = {

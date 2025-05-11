@@ -118,19 +118,21 @@ training:
   tag: 0
   output_dir: ""
   # optimization
-  lr_scheduler: OneCycleLR
-  lr_scheduler_params:
-    max_lr: 0.0001
-    pct_start: 0.15
-    anneal_strategy: cos
-    div_factor: 100.0
-    final_div_factor: 1000.0
-  lr_warmup_steps: 40000
+  lr_scheduler: cosine
+  lr_warmup_steps: 5000
+  #lr_scheduler: OneCycleLR
+  #lr_scheduler_params:
+  #  max_lr: 0.0001
+  #  pct_start: 0.15
+  #  anneal_strategy: cos
+  #  div_factor: 100.0
+  #  final_div_factor: 1000.0
+  #lr_warmup_steps: 40000
   num_epochs: 1000
   gradient_accumulate_every: 1
   # EMA destroys performance when used with BatchNorm
   # replace BatchNorm with GroupNorm.
-  use_ema: True
+  use_ema: False
   freeze_encoder: False
   # training loop control
   # in epochs

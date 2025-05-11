@@ -381,7 +381,9 @@ def main():
         pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
         actions = get_actions(all_actions, env, demo_idxs)
         obs, reward, success, time_out, extras = env.step(actions)
-        obs = state_tensor_to_nested(env.handler, obs)
+        obs = state_tensor_to_nested(
+            env.handler, obs
+        )  # {{"objects": object_states,"robots": robot_states,"cameras": camera_states}, ...,...,...}
         run_out = get_run_out(all_actions, env, demo_idxs)
 
         for env_id in range(env.handler.num_envs):
