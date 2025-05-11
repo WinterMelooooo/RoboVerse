@@ -3,3 +3,5 @@
 !/curobo
 !/DFormer
 !/pointops
+!/pointops/
+!/pointops/**
