@@ -107,7 +107,7 @@ class RobotPointCloudDataset(BaseImageDataset):
             v.pin_memory()
 
         self.transform_pcd = ComposePCD(transform_pcd)
-        if shape_meta is not None and "goal" in shape_meta.keys():
+        if shape_meta is not None and "goal" in shape_meta.keys() and shape_meta["goal"] is not None:
 
             clip_model = "ViT-B/16"
             clip_model, _ = clip.load(
