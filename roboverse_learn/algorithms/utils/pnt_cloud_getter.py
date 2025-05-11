@@ -47,29 +47,6 @@ ENV_POINT_CLOUD_CONFIG = {
     },
 }
 
-ENV_WIDE_POINT_CLOUD_CONFIG = {
-    "CloseBox": {
-        "min_bound": [-1.5, -2, 0.0],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
-        "max_bound": [1.5, 2, 100],  # gt approxiamately [0.75, 2.45, 0.98]
-        "num_points": 4096,
-        "point_sampling_method": "fps",
-        "cam_names": ["top"],
-        "transform": None,
-        "scale": np.array([1, 1, 1]),
-        "offset": np.array([0, 0, 0]),
-    },
-    "StackCube": {
-        "min_bound": [-1.5, -2, 0.0],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
-        "max_bound": [1.5, 2, 100],  # gt approxiamately [0.75, 2.45, 0.98]
-        "num_points": 4096,
-        "point_sampling_method": "fps",
-        "cam_names": ["top"],
-        "transform": None,
-        "scale": np.array([1, 1, 1]),
-        "offset": np.array([0, 0, 0]),
-    },
-}
-
 BBOX_OFFSET_DIC = {1: [0.0, 0.0, 0.0], 25: [8.0, -8.01, 0.0], 50: [14.3, -12.01, 0.0]}
 
 
@@ -117,17 +94,13 @@ class PntCloudGetter:
     fetch point cloud from mujoco and add it to obs
     """
 
-    def __init__(self, task_name, num_envs=1, use_point_crop=True, use_wide_point_cloud=False):
+    def __init__(self, task_name, num_envs=1, use_point_crop=True):
         if num_envs not in BBOX_OFFSET_DIC.keys():
             raise NotImplementedError(
                 "The point cloud getter relies on bounding box, whose x,y boundaries will translate as num_envs change. You can either set your num_envs to one of [1,25,50], or you can verify the specific offset for your num_envs by setting DEBUG=True in pnt_cloud_getter.py and run eval.py"
             )
-        self.env_cfg = ENV_POINT_CLOUD_CONFIG if not use_wide_point_cloud else ENV_WIDE_POINT_CLOUD_CONFIG
+        self.env_cfg = ENV_POINT_CLOUD_CONFIG
         task_name = self._get_task_name(task_name)
-        if use_wide_point_cloud:
-            print(f"[PntCloudGetter] using wide point cloud config, task_name: {task_name}")
-            print(f"min_bound: {self.env_cfg[task_name]['min_bound']}")
-            print(f"max_bound: {self.env_cfg[task_name]['max_bound']}")
         # point cloud cropping
         self.min_bound = self.env_cfg[task_name].get("min_bound", None)
         self.max_bound = self.env_cfg[task_name].get("max_bound", None)

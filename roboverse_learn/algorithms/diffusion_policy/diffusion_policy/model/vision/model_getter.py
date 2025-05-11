@@ -107,10 +107,20 @@ def get_vit(name, **kwargs):
         from .vit import ViT
     except:
         import sys
-        sys.path.append("/home/ghr/yktang/RoboVerse/roboverse_learn/algorithms/diffusion_policy/diffusion_policy/model/vision")
+        sys.path.append("./roboverse_learn/algorithms/diffusion_policy/diffusion_policy/model/vision")
         from vit import ViT
     vit = ViT(name, **kwargs).to(device="cpu")
     return vit
+
+def get_multivit(ckpt_path):
+    try:
+        from .multivit import MultiViTModel
+    except:
+        import sys
+        sys.path.append("./roboverse_learn/algorithms/diffusion_policy/diffusion_policy/model/vision")
+        from multivit import MultiViTModel
+    multimit = MultiViTModel(ckpt_path).to(device="cpu")
+    return multimit
 
 
 def get_spUnet(**kwargs):

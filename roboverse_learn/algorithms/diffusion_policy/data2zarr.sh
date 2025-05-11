@@ -16,9 +16,8 @@ act_space=${7} # joint_pos or ee
 delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 means delta control )
 store_rgbd=${9:-0} # 0 or 1
 store_pnt_cloud=${10:-0} # 0 or 1
-use_wide_pnt_cloud_range=${11:-0} # 0 or 1
-tag="${12:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${13:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+tag="${11:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${12:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
 
 horizon=8
@@ -41,4 +40,3 @@ python roboverse_learn/algorithms/data2zarr_dp.py \
 --delta_ee ${delta_ee} \
 --store_rgbd ${store_rgbd} \
 --store_pnt_cloud ${store_pnt_cloud} \
---use_wide_pnt_cloud_range ${use_wide_pnt_cloud_range} \

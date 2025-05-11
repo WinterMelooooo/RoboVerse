@@ -270,20 +270,23 @@ class RobotWorkspace(BaseWorkspace):
             if (self.epoch % cfg.training.val_every) == 0:
                 with torch.no_grad():
                     val_losses = list()
-                    with tqdm.tqdm(
-                        val_dataloader,
-                        desc=f"Validation epoch {self.epoch}",
-                        leave=False,
-                        mininterval=cfg.training.tqdm_interval_sec,
-                    ) as tepoch:
-                        for batch_idx, batch in enumerate(tepoch):
-                            batch = dataset.postprocess(batch, device)
-                            loss = model.compute_loss(batch)
-                            val_losses.append(loss)
-                            if (
-                                cfg.training.max_val_steps is not None
-                            ) and batch_idx >= (cfg.training.max_val_steps - 1):
-                                break
+                    if self.local_rank == 0:
+                        tepoch = tqdm.tqdm(
+                            val_dataloader,
+                            desc=f"Validation epoch {self.epoch}",
+                            leave=False,
+                            mininterval=cfg.training.tqdm_interval_sec,
+                        )
+                    else:
+                        tepoch = val_dataloader
+                    for batch_idx, batch in enumerate(tepoch):
+                        batch = dataset.postprocess(batch, device)
+                        loss = model.compute_loss(batch)
+                        val_losses.append(loss)
+                        if (
+                            cfg.training.max_val_steps is not None
+                        ) and batch_idx >= (cfg.training.max_val_steps - 1):
+                            break
                     if len(val_losses) > 0:
                         val_loss = torch.mean(torch.tensor(val_losses)).item()
                         # log epoch average validation loss

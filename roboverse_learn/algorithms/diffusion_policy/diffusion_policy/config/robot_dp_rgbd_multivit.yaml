@@ -49,9 +49,8 @@ policy:
     _target_: diffusion_policy.model.vision.multi_image_obs_encoder.MultiImageObsEncoder
     shape_meta: ${shape_meta}
     rgb_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_vit
-      name: vit_base_patch16
-      channels: 4
+      _target_: diffusion_policy.model.vision.model_getter.get_multivit
+      ckpt_path: null
     resize_shape: [256,256]
     crop_shape: [224,224]
     # constant center crop
@@ -69,8 +68,8 @@ policy:
   obs_as_global_cond: ${obs_as_global_cond}
   # crop_shape: null
   diffusion_step_embed_dim: 128
-  # down_dims: [512, 1024, 2048]
-  down_dims: [256, 512, 1024]
+  down_dims: [512, 1024, 2048]
+  #down_dims: [256, 512, 1024]
   kernel_size: 5
   n_groups: 8
   cond_predict_scale: True
