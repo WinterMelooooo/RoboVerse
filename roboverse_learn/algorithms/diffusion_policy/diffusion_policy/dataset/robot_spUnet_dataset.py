@@ -56,6 +56,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         max_visible_ratio=100,
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
+        shape_meta=None,
     ):
         super().__init__()
         # cprint(zarr_path, "red")
@@ -106,16 +107,18 @@ class RobotPointCloudDataset(BaseImageDataset):
             v.pin_memory()
 
         self.transform_pcd = ComposePCD(transform_pcd)
-        clip_model = "ViT-B/16"
-        clip_model, _ = clip.load(
-            clip_model, device="cuda", download_root=os.path.expanduser("~/yktang/.cache/clip")
-        )
-        clip_model.requires_grad_(False)
-        clip_model.eval()
-        description_token = clip.tokenize(VARIATION_DESCRIPTION[task_name][0]).to("cuda")
-        task_goal = clip_model.encode_text(description_token).cpu().numpy()
-        self.task_goal = dict(task_emb=task_goal.reshape(-1))
-        print(f"Successfully encoded task goal: {VARIATION_DESCRIPTION[task_name]}")
+        if shape_meta is not None and "goal" in shape_meta.keys():
+
+            clip_model = "ViT-B/16"
+            clip_model, _ = clip.load(
+                clip_model, device="cuda", download_root=os.path.expanduser("~/yktang/.cache/clip")
+            )
+            clip_model.requires_grad_(False)
+            clip_model.eval()
+            description_token = clip.tokenize(VARIATION_DESCRIPTION[task_name][0]).to("cuda")
+            task_goal = clip_model.encode_text(description_token).cpu().numpy()
+            self.task_goal = dict(task_emb=task_goal.reshape(-1))
+            print(f"Successfully encoded task goal: {VARIATION_DESCRIPTION[task_name]}")
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)
@@ -224,9 +227,10 @@ class RobotPointCloudDataset(BaseImageDataset):
         #   'offset': Tensor[B*n_obs_steps]
         # }
         data["obs"]["pcds"] = collated
-        goal_list = [self.task_goal] * B
-        # collate 后得到 {'task_emb': Tensor(B, C)}
-        data["goal"] = default_collate(goal_list)
+        if hasattr(self, "task_goal"):
+            goal_list = [self.task_goal] * B
+            # collate 后得到 {'task_emb': Tensor(B, C)}
+            data["goal"] = default_collate(goal_list)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data
 
