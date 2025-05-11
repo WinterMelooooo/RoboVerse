@@ -9,6 +9,8 @@ task_name: ${task.name}
 shape_meta: ${task.shape_meta}
 exp_name: "default"
 
+encoder_name: pntcloud_dp3
+
 horizon: 8
 n_obs_steps: 3
 n_action_steps: 4
@@ -138,8 +140,8 @@ logging:
   project: RoboVerse_DP
   resume: True
   mode: online
-  name: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
-  tags: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  tags: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
   id: null
   group: null
 
@@ -151,11 +153,11 @@ checkpoint:
     format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True
   save_last_snapshot: False
-  save_root_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
+  save_root_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
 
 multi_run:
   run_dir: info/outputs/DP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${task_name}
-  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
+  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
 
 hydra:
   job:
