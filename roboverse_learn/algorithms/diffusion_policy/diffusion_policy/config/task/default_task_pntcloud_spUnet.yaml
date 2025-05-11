@@ -12,8 +12,6 @@ shape_meta: &shape_meta
   action:
     shape: [9]
   goal:
-    task_emb:
-      shape: [512]
 
 env_runner:
   _target_: diffusion_policy.env_runner.pusht_image_runner.PushTImageRunner
