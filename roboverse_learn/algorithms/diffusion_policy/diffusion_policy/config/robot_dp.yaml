@@ -2,7 +2,7 @@ defaults:
   - _self_
   - task: default_task
 
-encoder_name: rgb_resnet18
+encoder_name: RGB_ResNet18
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace

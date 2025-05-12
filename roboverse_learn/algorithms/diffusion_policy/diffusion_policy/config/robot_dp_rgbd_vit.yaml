@@ -2,7 +2,7 @@ defaults:
   - _self_
   - task: default_task_rgbd_vit
 
-encoder_name: rgbd_vit
+encoder_name: RGBD_ViT
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
