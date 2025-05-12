@@ -259,7 +259,6 @@ class RobotWorkspace(BaseWorkspace):
             policy = model
             if cfg.training.use_ema:
                 policy = self.ema_model
-                print("Using EMA model for evaluation")
             policy.eval()
 
             # run rollout
