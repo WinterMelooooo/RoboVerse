@@ -6,10 +6,11 @@ import dill
 import hydra
 import numpy as np
 import torch
+from metasim.cfg.policy import DiffusionPolicyCfg
+from omegaconf import OmegaConf
+
 from diffusion_policy import RobotWorkspace
 from diffusion_policy.common.pytorch_util import dict_apply
-
-from metasim.cfg.policy import DiffusionPolicyCfg
 
 from .base_runner import PolicyRunner
 
@@ -47,11 +48,19 @@ class DPRunner(PolicyRunner):
         if "policy_runner" in cfg:
             self.policy_cfg.obs_config.from_dict(cfg.policy_runner.obs)
             self.policy_cfg.action_config.from_dict(cfg.policy_runner.action)
-            self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[0]
+            if OmegaConf.is_missing(cfg.shape_meta.obs, "agent_pos"):
+                self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.qpos.shape[0]
+                self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.qpos.shape[0]
+            else:
+                self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[
+                    0
+                ]
+                self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[
+                    0
+                ]
             self.policy_cfg.action_config.action_dim = cfg.shape_meta.action.shape[0]
 
         self.policy_cfg.action_config.action_chunk_steps = cfg.n_action_steps
-        self.policy_cfg.obs_config.obs_dim = cfg.shape_meta.obs.agent_pos.shape[0]
         self.policy_cfg.action_config.action_dim = cfg.shape_meta.action.shape[0]
 
         self.obs = deque(maxlen=cfg.n_obs_steps + 1)
@@ -67,9 +76,13 @@ class DPRunner(PolicyRunner):
             if n_steps > len(all_obs):
                 # pad
                 result[:start_idx] = result[start_idx]
-            result = np.swapaxes(result, 0, 1)  # Policy expects (Batch_size, n_steps, ...)
+            result = np.swapaxes(
+                result, 0, 1
+            )  # Policy expects (Batch_size, n_steps, ...)
         elif isinstance(all_obs[0], torch.Tensor):
-            result = torch.zeros((n_steps,) + all_obs[-1].shape, dtype=all_obs[-1].dtype)
+            result = torch.zeros(
+                (n_steps,) + all_obs[-1].shape, dtype=all_obs[-1].dtype
+            )
             start_idx = -min(n_steps, len(all_obs))
             result[start_idx:] = torch.stack(all_obs[start_idx:])
             if n_steps > len(all_obs):
@@ -92,7 +105,9 @@ class DPRunner(PolicyRunner):
 
         result = dict()
         for key in self.obs[0].keys():
-            result[key] = self._stack_last_n_obs([obs[key] for obs in self.obs], self.yaml_cfg.n_obs_steps)
+            result[key] = self._stack_last_n_obs(
+                [obs[key] for obs in self.obs], self.yaml_cfg.n_obs_steps
+            )
 
         return result
 
@@ -102,7 +117,9 @@ class DPRunner(PolicyRunner):
         obs = self._get_n_steps_obs()
 
         with torch.no_grad():
-            action_chunk = self.policy.predict_action(obs)["action"].detach().to(torch.float32)
+            action_chunk = (
+                self.policy.predict_action(obs)["action"].detach().to(torch.float32)
+            )
             action_chunk = action_chunk.transpose(0, 1)
         return action_chunk
 
@@ -125,7 +142,9 @@ class DPRunner(PolicyRunner):
                 min_d = depth.amin(dim=(1, 2, 3), keepdim=True)
                 max_d = depth.amax(dim=(1, 2, 3), keepdim=True)
                 depth = (depth - min_d) / (max_d - min_d)
-            assert depth.shape[1] == 1, f"depth should be 1 channel, but got {depth.shape}"
+            assert depth.shape[1] == 1, (
+                f"depth should be 1 channel, but got {depth.shape}"
+            )
             obs_dict["head_cam"] = torch.cat([obs_dict["head_cam"], depth], dim=1)
             assert obs_dict["head_cam"].shape[1] == 4, (
                 f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
@@ -142,7 +161,9 @@ class DPRunner(PolicyRunner):
                 depth = (depth - depth.min()) / (depth.max() - depth.min())
 
             depth = depth.permute(0, 3, 1, 2)  # (N_env, 1, H, W)
-            assert depth.shape[1] == 1, f"depth should be 1 channel, but got {depth.shape}"
+            assert depth.shape[1] == 1, (
+                f"depth should be 1 channel, but got {depth.shape}"
+            )
             obs_dict["head_cam"] = torch.cat([obs_dict["head_cam"], depth], dim=1)
             assert obs_dict["head_cam"].shape[1] == 4, (
                 f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
