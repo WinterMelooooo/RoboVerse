@@ -38,7 +38,7 @@ dataset:
   pad_after: ${eval:'${n_action_steps}-1'}
   seed: 42
   val_ratio: 0.02
-  batch_size: 64
+  batch_size: 16
   max_train_episodes: null
   task_name: ${task.name}
   transform_pcd:

@@ -203,10 +203,10 @@ def main():
                 cam_extr = obs.cameras["camera0"].extrinsics
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu())
 
-                for idx in range(len(pnt_cloud)):
-                    filename = f"tmp/visualize/eval/pntcloud_eval_{idx}.npy"
-                    np.save(filename, pnt_cloud[idx])
-                return
+                # for idx in range(len(pnt_cloud)):
+                #    filename = f"tmp/visualize/eval/pntcloud_eval_{idx}.npy"
+                #    np.save(filename, pnt_cloud[idx])
+                # return
 
                 new_obs["point_cloud"] = pnt_cloud
             images_list.append(np.array(new_obs["rgb"].cpu()))

@@ -3,8 +3,8 @@ import os
 import sys
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List
-import clip
 
+import clip
 import numba
 import numpy as np
 import torch
@@ -28,11 +28,15 @@ sys.path.append(".")
 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
 
 VARIATION_DESCRIPTION = {
-    "CloseBox": ['close box',
-                'close the lid on the box',
-                'shut the box',
-                'shut the box lid'],
+    "CloseBox": [
+        "close box",
+        "close the lid on the box",
+        "shut the box",
+        "shut the box lid",
+    ],
 }
+
+
 def get_task_name(task_name):
     for name in VARIATION_DESCRIPTION.keys():
         if task_name in name or name in task_name:
@@ -40,6 +44,7 @@ def get_task_name(task_name):
     raise ValueError(
         f"task_name {task_name} not in {list(VARIATION_DESCRIPTION.keys())}"
     )
+
 
 class RobotPointCloudDataset(BaseImageDataset):
     def __init__(
@@ -61,7 +66,6 @@ class RobotPointCloudDataset(BaseImageDataset):
         super().__init__()
         # cprint(zarr_path, "red")
         # cprint(batch_size, "red")
-        task_name = get_task_name(task_name)
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path,
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
@@ -107,15 +111,23 @@ class RobotPointCloudDataset(BaseImageDataset):
             v.pin_memory()
 
         self.transform_pcd = ComposePCD(transform_pcd)
-        if shape_meta is not None and "goal" in shape_meta.keys() and shape_meta["goal"] is not None:
-
+        if (
+            shape_meta is not None
+            and "goal" in shape_meta.keys()
+            and shape_meta["goal"] is not None
+        ):
+            task_name = get_task_name(task_name)
             clip_model = "ViT-B/16"
             clip_model, _ = clip.load(
-                clip_model, device="cuda", download_root=os.path.expanduser("~/yktang/.cache/clip")
+                clip_model,
+                device="cuda",
+                download_root=os.path.expanduser("~/yktang/.cache/clip"),
             )
             clip_model.requires_grad_(False)
             clip_model.eval()
-            description_token = clip.tokenize(VARIATION_DESCRIPTION[task_name][0]).to("cuda")
+            description_token = clip.tokenize(VARIATION_DESCRIPTION[task_name][0]).to(
+                "cuda"
+            )
             task_goal = clip_model.encode_text(description_token).cpu().numpy()
             self.task_goal = dict(task_emb=task_goal.reshape(-1))
             print(f"Successfully encoded task goal: {VARIATION_DESCRIPTION[task_name]}")
