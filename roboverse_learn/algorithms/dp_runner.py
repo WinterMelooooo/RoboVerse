@@ -51,7 +51,10 @@ class DPRunner(PolicyRunner):
             if "agent_pos" in obs_cfg:
                 dim = obs_cfg.agent_pos.shape[0]
             elif "qpos" in obs_cfg:
+                from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
                 dim = obs_cfg.qpos.shape[0]
+                transform_pcd = hydra.utils.instantiate(self.yaml_cfg.task.dataset.transform_pcd)
+                self.transform_pcd = ComposePCD(transform_pcd)
             else:
                 raise KeyError("shape_meta.obs: no agent_pos or qpos！")
 
@@ -86,6 +89,30 @@ class DPRunner(PolicyRunner):
                 # pad
                 result[:start_idx] = result[start_idx]
             result = result.transpose(0, 1)  # Policy expects (Batch_size, n_steps, ...)
+
+        elif isinstance(all_obs[0], list):
+            from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_spUnet_dataset import point_collate_fn
+            device = "cuda"
+            per_env = [list(env_obs) for env_obs in zip(*all_obs)]  # [N_timesteps, [N_env, Dict]] -> [N_env, [N_timesteps, Dict]]
+            # 2) 对每个环境取最后 n_steps 帧，不足时前面 pad 第一帧
+            pcds = []
+            for env_seq in per_env: # [N_env, [N_timesteps, Dict]] -> [N_env, [N_obs_steps, Dict]]
+                if len(env_seq) >= n_steps:
+                    trimmed = env_seq[-n_steps:]
+                else:
+                    pad = [env_seq[0]] * (n_steps - len(env_seq))
+                    trimmed = pad + env_seq
+                pcds.append(trimmed)  # trimmed is List[n_steps] of Dict
+            flat_pcds = sum( pcds, [] )  # list of dict, length = B * n_obs_steps
+
+            collated = point_collate_fn(flat_pcds)
+            # {
+            #   'coord': Tensor[M,3],
+            #   'grid_coord': Tensor[M,3],
+            #   'feat': Tensor[M,F],
+            #   'offset': Tensor[B*n_obs_steps]
+            # }
+            result = dict_apply(collated, lambda x: x.to(device, non_blocking=True))
         else:
             raise RuntimeError(f"Unsupported obs type {type(all_obs[0])}")
         return result
@@ -157,4 +184,24 @@ class DPRunner(PolicyRunner):
             assert obs_dict["head_cam"].shape[1] == 4, (
                 f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
             )
+        if "pcds" in self.yaml_cfg.task.shape_meta.obs.keys():
+            pcds = obs["point_cloud"] # (N_env, N_points, 6)
+            qpos = obs_dict["agent_pos"] # (N_env, 9)
+            new_obs_dict = dict()
+            new_obs_dict["pcds"] = []
+            new_obs_dict["qpos"] = qpos
+            for pcd in pcds:
+                coords = pcd[:, :3].astype(np.float32)
+                colors = pcd[:, 3:6].astype(np.float32)
+                pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
+                # {
+                    #   'coord': Tensor[M,3],
+                    #   'grid_coord': Tensor[M,3],
+                    #   'feat': Tensor[M,F],
+                    #   'offset': Tensor[N_env]
+                # }
+                new_obs_dict["pcds"].append(pcd_dict)
+            # new_obs_dict["pcds"] = torch.stack(new_obs_dict["pcds"], dim=0) # (N_env, Dict)
+            obs_dict = new_obs_dict
+
         return obs_dict

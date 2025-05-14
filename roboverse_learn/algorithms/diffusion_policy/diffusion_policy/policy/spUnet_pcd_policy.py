@@ -89,7 +89,8 @@ class spUnetPcdPolicy(BaseImagePolicy):
         self.horizon = horizon
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
-        self.n_action_steps = n_action_steps
+        self.n_action_steps = 4#n_action_steps
+        print(f"Due to typo while training, n_action_steps is manually set to 4 to align with other params, remove it for ckpts trained after 2025/05/13/23:46")
         self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
@@ -149,18 +150,22 @@ class spUnetPcdPolicy(BaseImagePolicy):
         result: must include "action" key
         """
         assert "past_action" not in obs_dict  # not implemented yet
-        assert "obs" in obs_dict or "pcds" in obs_dict, (
-            f"obs or pcd not found!, keys:{obs_dict.keys()}"
+        assert "obs" in obs_dict or "pcds" in obs_dict or "point_cloud" in obs_dict, (
+            f"obs or pcd or point_cloud not found!, keys:{obs_dict.keys()}"
         )
         if "obs" not in obs_dict:
             pcds = None
             if "pcds" in obs_dict:
                 pcds = obs_dict.pop("pcds")
+            elif "point_cloud" in obs_dict:
+                pcds = obs_dict.pop("point_cloud")
             nobs = self.normalizer.normalize(obs_dict)
         else:
             pcds = None
             if "pcds" in obs_dict["obs"]:
                 pcds = obs_dict["obs"].pop("pcds")
+            elif "point_cloud" in obs_dict["obs"]:
+                pcds = obs_dict["obs"].pop("point_cloud")
             nobs = self.normalizer.normalize(obs_dict["obs"])
         # normalize input
         value = next(iter(nobs.values()))

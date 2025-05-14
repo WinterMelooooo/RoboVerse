@@ -124,7 +124,7 @@ def main():
         subset=args.subset,
     )
     action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
-    if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+    if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
         try:
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
         except:
@@ -197,7 +197,7 @@ def main():
             ):
                 new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
-            if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+            if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
                 depth = obs.cameras["camera0"].depth
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics

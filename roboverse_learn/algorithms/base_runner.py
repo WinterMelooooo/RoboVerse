@@ -99,7 +99,12 @@ class PolicyRunner:
 
         assert obs_dict["agent_pos"].shape == (self.num_envs, self.policy_cfg.obs_config.obs_dim)
         # flush unused keys
+        if "pcds" in self.policy_cfg.obs_config.obs_keys:
+            self.policy_cfg.obs_config.obs_keys.append("point_cloud")
+        if "qpos" in self.policy_cfg.obs_config.obs_keys:
+            self.policy_cfg.obs_config.obs_keys.append("agent_pos")
         obs_dict = {k: v for k, v in obs_dict.items() if k in self.policy_cfg.obs_config.obs_keys}
+
         return obs_dict
 
     def action_to_dict(self, curr_action):
