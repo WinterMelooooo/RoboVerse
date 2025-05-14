@@ -15,7 +15,7 @@ class PCDObsEncoder(ModuleAttrMixin):
         shape_meta: dict,
         pcd_model: Union[nn.Module, Dict[str, nn.Module]],
         share_pcd_model: bool = True,
-        n_obs_step: int = 2,
+        n_obs_steps: int = 2,
         pcd_nsample: int = 16,
         pcd_npoints: int = 1024,
         use_mask: bool = False,
@@ -73,7 +73,7 @@ class PCDObsEncoder(ModuleAttrMixin):
         self.pcd_keys = pcd_keys
         self.low_dim_keys = low_dim_keys
         self.key_shape_map = key_shape_map
-        self.n_obs_step = n_obs_step
+        self.n_obs_steps = n_obs_steps
         self.use_mask = use_mask
 
         self.pre_sample = pre_sample
@@ -244,9 +244,9 @@ class PCDObsEncoder(ModuleAttrMixin):
         for key in self.pcd_keys:
             pcd = obs_dict[key]
             if batch_size is None:
-                assert (len(pcd["offset"]) % self.n_obs_step) == 0, (
+                assert (len(pcd["offset"]) % self.n_obs_steps) == 0, (
                     len(pcd["offset"]),
-                    self.n_obs_step,
+                    self.n_obs_steps,
                 )
                 batch_size = len(pcd["offset"])
             assert pcd["feat"].shape[1:] == self.key_shape_map[key]

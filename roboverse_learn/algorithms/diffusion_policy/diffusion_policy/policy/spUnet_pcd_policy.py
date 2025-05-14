@@ -89,8 +89,8 @@ class spUnetPcdPolicy(BaseImagePolicy):
         self.horizon = horizon
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
-        self.n_action_steps = 4#n_action_steps
-        print(f"Due to typo while training, n_action_steps is manually set to 4 to align with other params, remove it for ckpts trained after 2025/05/13/23:46")
+        self.n_action_steps = n_action_steps #4
+        #print(f"Due to typo while training, n_action_steps is manually set to 4 to align with other params, remove it for ckpts trained after 2025/05/13/23:46")
         self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
