@@ -31,9 +31,9 @@
     </tr>
     <tr>
       <td>CloseBoxL1</td>
-      <td>0.4</td>
+      <td>0.40</td>
       <td>0.58</td>
-      <td>0.48</td>
+      <td>0.40</td>
       <td>----</td>
       <td><b>0.73</b></td>
       <td>0.88</td>
@@ -110,7 +110,7 @@
       <td>CloseBoxL1</td>
       <td>0.20</td>
       <td>0.50</td>
-      <td>----</td>
+      <td>0.36</td>
       <td>----</td>
       <td><b>0.77</b></td>
       <td>0.88</td>
@@ -128,7 +128,25 @@
       <td>StackCubeL0</td>
       <td><b>0.29</b></td>
       <td>0.19</td>
+      <td>0.00</td>
       <td>----</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <td>StackCubeL1</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>----</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <td>StackCubeL2</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
       <td>----</td>
       <td>0.00</td>
       <td>0.00</td>
