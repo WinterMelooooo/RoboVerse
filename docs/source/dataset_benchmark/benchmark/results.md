@@ -54,7 +54,7 @@
       <td>0.06</td>
       <td>----</td>
       <td>0.00</td>
-      <td>----</td>
+      <td>0.00</td>
     </tr>
     <tr>
       <td>StackCubeL1</td>
@@ -63,7 +63,7 @@
       <td>----</td>
       <td>----</td>
       <td>0.00</td>
-      <td>----</td>
+      <td>0.00</td>
     </tr>
     <tr>
       <td>StackCubeL2</td>
@@ -72,12 +72,13 @@
       <td>----</td>
       <td>----</td>
       <td>0.00</td>
-      <td>----</td>
+      <td>0.00</td>
     </tr>
   </tbody>
 </table>
 
 ## Out-of-distribution Evaluation(Zero-shot)
+
 <table>
   <thead>
     <tr>
@@ -103,7 +104,7 @@
       <td>----</td>
       <td>----</td>
       <td>0.60</td>
-      <td>----</td>
+      <td>0.94</td>
     </tr>
     <tr>
       <td>CloseBoxL1</td>
