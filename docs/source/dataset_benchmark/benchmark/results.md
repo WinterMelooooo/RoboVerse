@@ -27,7 +27,7 @@
       <td>0.89</td>
       <td>----</td>
       <td>0.82</td>
-      <td>----</td>
+      <td>0.92</td>
     </tr>
     <tr>
       <td>CloseBoxL1</td>
@@ -36,7 +36,7 @@
       <td>0.48</td>
       <td>----</td>
       <td><b>0.73</b></td>
-      <td>----</td>
+      <td>0.88</td>
     </tr>
     <tr>
       <td>CloseBoxL2</td>
@@ -112,7 +112,7 @@
       <td>----</td>
       <td>----</td>
       <td><b>0.77</b></td>
-      <td>----</td>
+      <td>0.88</td>
     </tr>
     <tr>
       <td>CloseBoxL2</td>
