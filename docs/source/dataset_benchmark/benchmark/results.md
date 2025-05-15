@@ -101,7 +101,7 @@
       <td>CloseBoxL0</td>
       <td>0.52</td>
       <td><b>0.72</b></td>
-      <td>----</td>
+      <td>0.68</td>
       <td>----</td>
       <td>0.60</td>
       <td>0.94</td>
