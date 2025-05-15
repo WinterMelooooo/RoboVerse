@@ -23,4 +23,4 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 # 调用多机脚本
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-bash train_dp_slurm.sh roboverse_demo/demo_isaaclab/CloseBox-Level1/robot-franka CloseBoxFrankaL2 100 0,1,2,3,4,5,6,7 2000 joint_pos joint_pos 0 1 1 robot_dp_rgbd_vit 1 50048 50 sqrt
+bash roboverse_learn/algorithms/diffusion_policy/train_dp_slurm.sh roboverse_demo/demo_isaaclab/CloseBox-Level1/robot-franka CloseBoxFrankaL2 100 0,1,2,3,4,5,6,7 2000 joint_pos joint_pos 0 1 1 robot_dp_rgbd_vit 1 50048 50 sqrt
