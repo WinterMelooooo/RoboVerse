@@ -31,6 +31,8 @@ if [ "${delta_ee}" = 1 ]; then
   extra="${extra}_delta"
 fi
 
+python roboverse_learn/algorithms/diffusion_policy/scripts/prune_and_rename.py ${metadata_dir}
+
 python roboverse_learn/algorithms/data2zarr_dp.py \
 --task_name ${task_name}_${extra} \
 --expert_data_num ${expert_data_num} \

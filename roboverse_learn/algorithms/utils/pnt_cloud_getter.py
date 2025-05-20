@@ -94,7 +94,11 @@ class PntCloudGetter:
                 "The point cloud getter relies on bounding box, whose x,y boundaries will translate as num_envs change. You can either set your num_envs to one of [1,25,50], or you can verify the specific offset for your num_envs by setting DEBUG=True in pnt_cloud_getter.py and run eval.py"
             )
         self.env_cfg = ENV_POINT_CLOUD_CONFIG
-        task_name = self._get_task_name(task_name)
+        try:
+            task_name = self._get_task_name(task_name)
+        except:
+            task_name = "CloseBox"
+            print(f"task_name not found, using default bounding box for task: {task_name}")
         # point cloud cropping
         self.min_bound = self.env_cfg[task_name].get("min_bound", None)
         self.max_bound = self.env_cfg[task_name].get("max_bound", None)
