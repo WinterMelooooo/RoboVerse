@@ -4,7 +4,7 @@ from typing import Dict
 import numba
 import numpy as np
 import torch
-from diffusion_policy.common.normalize_util import get_image_range_normalizer
+from diffusion_policy.common.normalize_util import get_image_range_normalizer, get_identity_normalizer
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.common.sampler import (
@@ -16,6 +16,13 @@ from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from termcolor import cprint
 
+ROBOT_ROOT_STATE = torch.tensor(
+    [-0.6149997711181641, 0.0, 0.0,    # 根节点的位置 xyz
+      1.0, 0.0, 0.0, 0.0,              # 根节点的姿态四元数 wxyz
+      0.0, 0.0, 0.0,                   # 根节点的线速度 vx,vy,vz
+      0.0, 0.0, 0.0],                  # 根节点的角速度 wx,wy,wz
+    dtype=torch.float32
+)
 
 class RobotPointCloudDataset(BaseImageDataset):
     def __init__(
@@ -29,6 +36,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         batch_size=64,
         max_train_episodes=None,
         max_visible_ratio=100,
+        norm_pnt_cloud=True,
     ):
 
         super().__init__()
@@ -44,7 +52,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         while self.replay_buffer.n_episodes > keep_n_episodes:
             self.replay_buffer.pop_episode()
         print(f"Using {self.replay_buffer.n_episodes} episodes for training and validation.")
-
+        print(f"Norm point cloud: {norm_pnt_cloud}")
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)
@@ -60,6 +68,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         self.horizon = horizon
         self.pad_before = pad_before
         self.pad_after = pad_after
+        self.norm_pnt_cloud = norm_pnt_cloud
 
         self.batch_size = batch_size
         sequence_length = self.sampler.sequence_length
@@ -87,9 +96,12 @@ class RobotPointCloudDataset(BaseImageDataset):
         data = {
             "action": self.replay_buffer["action"],
             "agent_pos": self.replay_buffer["state"],
-            "point_cloud": self.replay_buffer["head_camera_pnt_cloud"],
         }
         normalizer = LinearNormalizer()
+        if self.norm_pnt_cloud:
+            data["point_cloud"] = self.replay_buffer["head_camera_pnt_cloud"]
+        else:
+            normalizer["point_cloud"] = get_identity_normalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
         normalizer["head_cam"] = get_image_range_normalizer()
         normalizer["front_cam"] = get_image_range_normalizer()
@@ -143,14 +155,36 @@ class RobotPointCloudDataset(BaseImageDataset):
         head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0
         action = samples["action"].to(device, non_blocking=True)
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
+        if not self.norm_pnt_cloud:
+            # Transform the origin of the point cloud to robot root
+            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)# B, T, 4096, 6
+            if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 6):
+                raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)")
         return {
             "obs": {
                 "head_cam": head_cam,  # B, T, 3, H, W
                 "agent_pos": agent_pos,  # B, T, D
-                "point_cloud": point_cloud,  # B, T, 1024, 6
+                "point_cloud": point_cloud,  # B, T, 4096, 6
             },
             "action": action,  # B, T, D
         }
+
+def transform_point_cloud(point_cloud, robot_root_state, device=None):
+    if device is None:
+        device = point_cloud.device
+    if isinstance(point_cloud, np.ndarray):
+        point_cloud = torch.from_numpy(point_cloud).to(device)
+    root_xyz = robot_root_state[:3].to(device)
+    coords = point_cloud[..., :3]
+    colors = point_cloud[..., 3:]
+    if coords.dim() == 4:
+        root_pos = root_xyz.view(1, 1, 1, 3)
+    elif coords.dim() == 3:
+        root_pos = root_xyz.view(1, 1, 3)
+    else:
+        raise ValueError(f"Unexpected coords.dim() = {coords.dim()}")
+    coords = coords - root_pos
+    return torch.cat([coords, colors], dim=-1)  # 保持 (B,T,N,6) 或 (B,N,6)
 
 
 def _batch_sample_sequence(

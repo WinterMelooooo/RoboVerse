@@ -38,7 +38,7 @@ dataset:
   pad_after: ${eval:'${n_action_steps}-1'}
   seed: 42
   val_ratio: 0.02
-  batch_size: 16
+  batch_size: 32
   max_train_episodes: null
   task_name: ${task.name}
   transform_pcd:
@@ -51,7 +51,7 @@ dataset:
       keys:
         - coord
         - color
-    - _target_: roboverse_learn.algorithms.utils.transformpcd.NormalizeColorPCD
+#    - _target_: roboverse_learn.algorithms.utils.transformpcd.NormalizeColorPCD
     - _target_: roboverse_learn.algorithms.utils.transformpcd.ShufflePointPCD
     - _target_: roboverse_learn.algorithms.utils.transformpcd.ToTensorPCD
     - _target_: roboverse_learn.algorithms.utils.transformpcd.CollectPCD

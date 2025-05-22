@@ -21,13 +21,14 @@ test_rescale=${12:-0}
 master_port=${13:-50023}
 max_visible_ratio=${14:-100} # 0.5 for 50% visible, 1 for 100% visible
 multigpu_lr_policy=${15:-"sqrt"}
-horizon=${16:-8} # 8 for 8 steps, 16 for 16 steps
-n_obs_steps=${17:-3} # 3 for 3 steps, 2 for 2 steps
-n_action_steps=${18:-4} # 4 for 4 steps, 8 for 8 steps
-tag="${19:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${20:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+seed=${16:-42}
+norm_pnt_cloud=${17:-1}
+horizon=${18:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${19:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${20:-4} # 4 for 4 steps, 8 for 8 steps
+tag="${21:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${22:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
-seed=42
 
 # adding the obs and action space as additional info
 extra="obs:${obs_space}_act:${act_space}"
@@ -47,6 +48,8 @@ fi
 
 echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
 echo -e "master port: ${master_port}"
+echo -e "seed: ${seed}"
+echo -e "norm_pnt_cloud: ${norm_pnt_cloud}"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
@@ -67,3 +70,4 @@ training.tag=${tag} \
 ++policy.obs_encoder.test_rescale=${test_rescale} \
 ++task.dataset.max_visible_ratio=${max_visible_ratio} \
 ++optimizer.multigpu_lr_policy=${multigpu_lr_policy} \
+++task.dataset.norm_pnt_cloud=${norm_pnt_cloud} \
