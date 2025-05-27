@@ -9,6 +9,9 @@ import numpy as np
 import torch
 import tqdm
 import wandb
+import sys
+sys.path.append(".")
+
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
 from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
@@ -23,7 +26,6 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
-
 
 class RobotWorkspace(BaseWorkspace):
     include_keys = ["global_step", "epoch"]
@@ -75,12 +77,6 @@ class RobotWorkspace(BaseWorkspace):
     def run(self):
         cfg = copy.deepcopy(self.cfg)
         model = self.model
-        # resume training
-        if cfg.training.resume:
-            lastest_ckpt_path = self.get_checkpoint_path(cfg.training.tag)
-            if lastest_ckpt_path.is_file():
-                print(f"Resuming from checkpoint {lastest_ckpt_path}")
-                self.load_checkpoint(path=lastest_ckpt_path)
         # configure dataset
         dataset: BaseImageDataset
         dataset = hydra.utils.instantiate(cfg.task.dataset)
@@ -94,23 +90,19 @@ class RobotWorkspace(BaseWorkspace):
         val_dataloader = create_dataloader(
             val_dataset, **cfg.val_dataloader, multi_gpu=self.world_size > 1
         )
-
-        model.set_normalizer(normalizer)
-        if cfg.training.use_ema:
-            self.ema_model.set_normalizer(normalizer)
         # configure lr scheduler
         if cfg.training.lr_scheduler == "OneCycleLR":
             kwargs = dict(cfg.training.lr_scheduler_params)  # 或者用 OmegaConf.to_container(...)
             effective_steps = len(train_dataloader) // cfg.training.gradient_accumulate_every
             kwargs["steps_per_epoch"] = effective_steps
             kwargs["epochs"] = cfg.training.num_epochs
-            lr_scheduler = get_scheduler(
+            self.lr_scheduler = get_scheduler(
                 cfg.training.lr_scheduler,
                 optimizer=self.optimizer,
                 **kwargs,
             )
         else:
-            lr_scheduler = get_scheduler(
+            self.lr_scheduler = get_scheduler(
                 cfg.training.lr_scheduler,
                 optimizer=self.optimizer,
                 num_warmup_steps=cfg.training.lr_warmup_steps // self.world_size,
@@ -120,6 +112,17 @@ class RobotWorkspace(BaseWorkspace):
                 # however huggingface diffusers steps it every batch
                 last_epoch=self.global_step - 1,
             )
+        lr_scheduler = self.lr_scheduler
+        # resume training
+        if cfg.training.resume:
+            lastest_ckpt_path = self.get_checkpoint_path(cfg.training.tag)
+            if lastest_ckpt_path.is_file():
+                print(f"Resuming from checkpoint {lastest_ckpt_path}")
+                self.load_checkpoint(path=lastest_ckpt_path)
+
+        model.set_normalizer(normalizer)
+        if cfg.training.use_ema:
+            self.ema_model.set_normalizer(normalizer)
         # configure ema
         ema: EMAModel = None
         if cfg.training.use_ema:

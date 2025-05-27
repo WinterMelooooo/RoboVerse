@@ -17,17 +17,16 @@ delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 m
 store_rgbd=${9:-0} # 0 or 1
 store_pnt_cloud=${10:-0} # 0 or 1
 config_name=${11:-"robot_dp"}
-test_rescale=${12:-0}
-master_port=${13:-50023}
-max_visible_ratio=${14:-100} # 0.5 for 50% visible, 1 for 100% visible
-multigpu_lr_policy=${15:-"sqrt"}
-seed=${16:-42}
-norm_pnt_cloud=${17:-1}
-horizon=${18:-8} # 8 for 8 steps, 16 for 16 steps
-n_obs_steps=${19:-3} # 3 for 3 steps, 2 for 2 steps
-n_action_steps=${20:-4} # 4 for 4 steps, 8 for 8 steps
-tag="${21:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${22:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+master_port=${12:-50023}
+max_visible_ratio=${13:-100} # 0.5 for 50% visible, 1 for 100% visible
+multigpu_lr_policy=${14:-"sqrt"}
+seed=${15:-42}
+norm_pnt_cloud=${16:-1}
+horizon=${17:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${18:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${19:-4} # 4 for 4 steps, 8 for 8 steps
+tag="${20:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${21:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
 
 # adding the obs and action space as additional info
@@ -55,7 +54,7 @@ export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
 torchrun --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
 roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
-task.name=${task_name}_${extra} \
+task.name="${task_name}_${extra}" \
 task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
 training.seed=${seed} \
 horizon=${horizon} \
@@ -67,7 +66,6 @@ policy_runner.action.action_type=${act_space} \
 policy_runner.action.delta=${delta_ee} \
 training.output_dir=${output_dir} \
 training.tag=${tag} \
-++policy.obs_encoder.test_rescale=${test_rescale} \
 ++task.dataset.max_visible_ratio=${max_visible_ratio} \
 ++optimizer.multigpu_lr_policy=${multigpu_lr_policy} \
 ++task.dataset.norm_pnt_cloud=${norm_pnt_cloud} \

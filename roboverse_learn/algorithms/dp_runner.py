@@ -31,7 +31,7 @@ class DPRunner(PolicyRunner):
         cfg = payload["cfg"]
         cls = hydra.utils.get_class(cfg._target_)
         workspace: RobotWorkspace = cls(cfg, output_dir=kwargs.get("output_dir", None))
-        workspace.load_payload(payload, exclude_keys=None, include_keys=None)
+        workspace.load_payload(payload, exclude_keys=["lr_scheduler"], include_keys=None)
 
         # get policy from workspace
         policy = workspace.model

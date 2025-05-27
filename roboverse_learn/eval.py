@@ -240,6 +240,7 @@ def main():
         log.info(f"SuccessEnd: {SuccessEnd}")
         log.info(f"TimeOut: {TimeOut}")
         log.info(f"Finished evaling checkpoint: {args.checkpoint_path.split('/')[-3]}")
+        log.info(f"Results saved to tmp/{ckpt_name}")
     log.info(f"FINAL RESULTS: {total_success / total_completed}")
     with open(f"tmp/{ckpt_name}/final_stats.txt", "w") as f:
         f.write(f"Total Success: {total_success}\n")

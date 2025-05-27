@@ -1,6 +1,8 @@
 import torch
 import torchvision
-
+import torch.nn as nn
+from termcolor import cprint
+from typing import Optional, Dict, Tuple, Union, List, Type
 
 def get_resnet(name, weights=None, **kwargs):
     """
@@ -94,9 +96,9 @@ def get_resnet_rgbd(name, weights = None, **kwargs):
     resnet.fc = torch.nn.Identity()
     return resnet
 
-def get_pointnet(name, **kwargs):
-    from .pointnet import PointNetfeat
-    return PointNetfeat()
+def get_pointnet(**kwargs):
+    from .dp3_encoder import PointNetEncoderXYZ
+    return PointNetEncoderXYZ(**kwargs)
 
 
 def get_vit(name, **kwargs):
@@ -131,3 +133,63 @@ def get_spUnet(**kwargs):
         sys.path.append(".")
         from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.spUnet import SpUNet
     return SpUNet(**kwargs)
+
+
+def get_state_mlp(observation_space: Dict,
+                  state_mlp_size=(64, 64),
+                  state_mlp_activation_fn=nn.ReLU,):
+        state_key = 'agent_pos'
+        state_shape = observation_space[state_key]["shape"]
+        if len(state_mlp_size) == 0:
+            raise RuntimeError(f"State mlp size is empty")
+        elif len(state_mlp_size) == 1:
+            net_arch = []
+        else:
+            net_arch = state_mlp_size[:-1]
+        output_dim = state_mlp_size[-1]
+        state_mlp = nn.Sequential(*create_mlp(state_shape[0], output_dim, net_arch, state_mlp_activation_fn))
+        return state_mlp
+
+
+def create_mlp(
+        input_dim: int,
+        output_dim: int,
+        net_arch: List[int],
+        activation_fn: Type[nn.Module] = nn.ReLU,
+        squash_output: bool = False,
+) -> List[nn.Module]:
+    """
+    Create a multi layer perceptron (MLP), which is
+    a collection of fully-connected layers each followed by an activation function.
+
+    :param input_dim: Dimension of the input vector
+    :param output_dim:
+    :param net_arch: Architecture of the neural net
+        It represents the number of units per layer.
+        The length of this list is the number of layers.
+    :param activation_fn: The activation function
+        to use after each layer.
+    :param squash_output: Whether to squash the output using a Tanh
+        activation function
+    :return:
+    """
+
+    if len(net_arch) > 0:
+        modules = [nn.Linear(input_dim, net_arch[0]), activation_fn()]
+    else:
+        modules = []
+
+    for idx in range(len(net_arch) - 1):
+        modules.append(nn.Linear(net_arch[idx], net_arch[idx + 1]))
+        modules.append(activation_fn())
+
+    if output_dim > 0:
+        last_layer_dim = net_arch[-1] if len(net_arch) > 0 else input_dim
+        modules.append(nn.Linear(last_layer_dim, output_dim))
+    if squash_output:
+        modules.append(nn.Tanh())
+    return modules
+
+
+def get_identity():
+    return nn.Identity()

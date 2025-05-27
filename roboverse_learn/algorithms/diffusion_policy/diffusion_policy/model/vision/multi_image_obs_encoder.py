@@ -216,7 +216,11 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                             std = dic_stds[task_name]
                             break
                     if mean is None or std is None:
-                        raise ValueError(f"Invalid name: {name}")
+                        #raise ValueError(f"Invalid name: {name}")
+                        print(f"Invalid name: {name}, using default mean and std")
+                        name = "CloseBox"
+                        mean = dic_means[name]
+                        std = dic_stds[name]
                     mean = [0.485, 0.456, 0.406, mean]
                     std = [0.229, 0.224, 0.225, std]
                     if not test_rescale:

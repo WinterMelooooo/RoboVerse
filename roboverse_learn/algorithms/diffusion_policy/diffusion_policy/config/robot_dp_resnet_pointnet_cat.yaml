@@ -1,21 +1,22 @@
 defaults:
   - _self_
-  - task: default_task_pntcloud
+  - task: default_task_resnet_pointnet_cat
+
+encoder_name: Fusion_ResNet18_PointNet_Cat
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
-
-encoder_name: PntCloud_DP3
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
 exp_name: "default"
 
-horizon: 16
-n_obs_steps: 2
-n_action_steps: 8
+horizon: 8
+n_obs_steps: 3
+n_action_steps: 4
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
+past_action_visible: False
 keypoint_visible_rate: 1.0
 obs_as_global_cond: True
 
@@ -32,54 +33,60 @@ policy_runner:
       rotation_rep: "quaternion"
       gripper_rep: "q_pos"
 policy:
-  _target_: diffusion_policy.policy.dp3_policy.DP3
+  _target_: diffusion_policy.policy.multimodal_policy.MultiModalPolicy
 
-  use_point_crop: true
-  cond_predict_scale: true
-
-  diffusion_step_embed_dim: 128
-  down_dims:
-  - 512
-  - 1024
-  - 2048
-  crop_shape:
-  - 80
-  - 80
-  encoder_output_dim: 64
-  horizon: ${horizon}
-  kernel_size: 5
-  n_action_steps: ${n_action_steps}
-  n_groups: 8
-  n_obs_steps: ${n_obs_steps}
+  shape_meta: ${shape_meta}
 
   noise_scheduler:
-    _target_: diffusers.schedulers.scheduling_ddim.DDIMScheduler
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
     num_train_timesteps: 100
     beta_start: 0.0001
     beta_end: 0.02
     beta_schedule: squaredcos_cap_v2
-    clip_sample: True
-    set_alpha_to_one: True
-    steps_offset: 0
-    prediction_type: sample
+    variance_type: fixed_small # Yilun's paper uses fixed_small_log instead, but easy to cause Nan
+    clip_sample: True # required when predict_epsilon=False
+    prediction_type: epsilon # or sample
 
+  obs_encoder:
+    _target_: diffusion_policy.model.vision.multimodal_encoder.MultiModalEncoder
+    shape_meta: ${shape_meta}
+    img_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_resnet
+      name: resnet18
+      weights: null
+    pntcloud_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_pointnet
+      in_channels: 3
+      out_channels: 64
+      use_layernorm: true
+      final_norm: layernorm # layernorm, none
+      normal_channel: false
+    robot_state_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_state_mlp
+      observation_space: ${shape_meta.obs}
 
-  num_inference_steps: 10
-  obs_as_global_cond: true
-  shape_meta: ${shape_meta}
+    img_encoder_args:
+      resize_shape: null
+      crop_shape: null
+      random_crop: True
+      use_group_norm: True
+      imagenet_norm: True
 
-  use_pc_color: false
-  pointnet_type: "pointnet"
+    fusion_args:
+      fusion_method: cat
 
-
-  pointcloud_encoder_cfg:
-    in_channels: 3
-    out_channels: ${policy.encoder_output_dim}
-    use_layernorm: true
-    final_norm: layernorm # layernorm, none
-    normal_channel: false
-
-
+  horizon: ${horizon}
+  n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
+  n_obs_steps: ${n_obs_steps}
+  num_inference_steps: 100
+  obs_as_global_cond: ${obs_as_global_cond}
+  # crop_shape: null
+  diffusion_step_embed_dim: 128
+  # down_dims: [512, 1024, 2048]
+  down_dims: [256, 512, 1024]
+  kernel_size: 5
+  n_groups: 8
+  cond_predict_scale: True
 
   # scheduler.step params
   # predict_epsilon: True
@@ -93,14 +100,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 64
+  batch_size: 128
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 64
+  batch_size: 128
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -108,7 +115,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 2.5e-5
+  lr: 1.0e-4
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
@@ -120,19 +127,26 @@ training:
   resume: True
   tag: 0
   output_dir: ""
+  # optimization
   lr_scheduler: cosine
-  lr_warmup_steps: 5000
-  num_epochs: 3000
+  lr_warmup_steps: 500
+  num_epochs: 1000
   gradient_accumulate_every: 1
+  # EMA destroys performance when used with BatchNorm
+  # replace BatchNorm with GroupNorm.
   use_ema: True
-  rollout_every: 50
-  checkpoint_every: 1000
-  val_every: 1
-  sample_every: 5
-  max_train_steps: null
-  max_val_steps: null
-  tqdm_interval_sec: 1.0
   freeze_encoder: False
+  # training loop control
+  # in epochs
+  rollout_every: 50
+  checkpoint_every: 50
+  val_every: 5
+  sample_every: 5
+  # steps per epoch
+  max_train_steps: 250
+  max_val_steps: 250
+  # misc
+  tqdm_interval_sec: 1.0
 
 logging:
   project: RoboVerse_DP
