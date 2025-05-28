@@ -64,10 +64,10 @@ class LinearNormalizer(DictOfTensorMixin):
                 params = self.params_dict[key]
                 try:
                     result[key] = _normalize(value, params, forward=forward)
-                except:
-                    import pdb
-
-                    pdb.set_trace()
+                except Exception as e:
+                    print(f"input keys are: {x.keys()}")
+                    print(f"normalizer keys are: {self.params_dict.keys()}")
+                    raise e
             return result
         else:
             if "_default" not in self.params_dict:
@@ -279,6 +279,8 @@ def _fit(
 
 def _normalize(x, params, forward=True):
     assert "scale" in params
+    if isinstance(x, Dict):
+        return dict_apply(x, lambda v: _normalize(v, params, forward=forward))
     if isinstance(x, np.ndarray):
         x = torch.from_numpy(x)
     scale = params["scale"]

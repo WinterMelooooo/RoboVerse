@@ -123,6 +123,7 @@ class MultiModalEncoder(ModuleAttrMixin):
 
     def forward(self, obs_dict):
         batch_size = None
+        batch_size_pnt = None
         img_features = list()
         low_dim_features = list()
         pntcloud_features = list()
@@ -160,11 +161,19 @@ class MultiModalEncoder(ModuleAttrMixin):
 
         for key in self.point_cloud_keys:
             pnt_cloud = obs_dict[key]
-            if batch_size is None:
-                batch_size = pnt_cloud.shape[0]
+            if batch_size_pnt is None:
+                if isinstance(pnt_cloud, Dict):
+                    first_key = next(iter(pnt_cloud))
+                    batch_size_pnt = pnt_cloud[first_key].shape[0]
+                else:
+                    batch_size_pnt = pnt_cloud.shape[0]
             else:
-                assert batch_size == pnt_cloud.shape[0]
-            assert pnt_cloud.shape[1:] == self.key_shape_map[key], f"pnt_cloud.shape: {pnt_cloud.shape}, expected: {self.key_shape_map[key]}"
+                if isinstance(pnt_cloud, Dict):
+                    first_key = next(iter(pnt_cloud))
+                    assert batch_size_pnt == len(pnt_cloud[first_key]), f"batch_size_pnt mismatch for key {key}: {batch_size_pnt} vs {len(pnt_cloud[first_key])}"
+                else:
+                    assert batch_size_pnt == pnt_cloud.shape[0]
+            #assert pnt_cloud.shape[1:] == self.key_shape_map[key], f"pnt_cloud.shape: {pnt_cloud.shape}, expected: {self.key_shape_map[key]}"
             pnt_cloud = self.key_transform_map[key](pnt_cloud)
             feature = self.key_model_map[key](pnt_cloud)
             pntcloud_features.append(feature.to(device))

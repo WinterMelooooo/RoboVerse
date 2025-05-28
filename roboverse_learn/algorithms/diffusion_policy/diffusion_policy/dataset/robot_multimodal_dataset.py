@@ -19,6 +19,7 @@ from omegaconf import DictConfig
 from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import transform_point_cloud, ROBOT_ROOT_STATE
 from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_spUnet_dataset import point_collate_fn
 from typing import Any, Dict, List
+from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
 
 class MultiModalDataset(BaseImageDataset):
     def __init__(
@@ -35,6 +36,7 @@ class MultiModalDataset(BaseImageDataset):
         norm_pnt_cloud=False,
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
+        pnt_cloud_with_rgb=False,
     ):
 
         super().__init__()
@@ -70,6 +72,7 @@ class MultiModalDataset(BaseImageDataset):
         self.n_obs_steps = n_obs_steps
         self.grid_pnt_cloud = bool(transform_pcd is not None)
         self.batch_size = batch_size
+        self.transform_pcd = ComposePCD(transform_pcd)
         sequence_length = self.sampler.sequence_length
         self.buffers = {
             k: np.zeros((batch_size, sequence_length, *v.shape[1:]), dtype=v.dtype)
@@ -78,7 +81,7 @@ class MultiModalDataset(BaseImageDataset):
         self.buffers_torch = {k: torch.from_numpy(v) for k, v in self.buffers.items()}
         for v in self.buffers_torch.values():
             v.pin_memory()
-
+        self.pnt_cloud_with_rgb = pnt_cloud_with_rgb
     def get_validation_dataset(self):
         val_set = copy.copy(self)
         val_set.sampler = SequenceSampler(
@@ -97,6 +100,10 @@ class MultiModalDataset(BaseImageDataset):
             "front_cam": get_image_range_normalizer,
             "left_cam": get_image_range_normalizer,
             "right_cam": get_image_range_normalizer,
+            #"coord": get_identity_normalizer,
+            #"color": get_identity_normalizer,
+            #"feat": get_identity_normalizer,
+            #"offset": get_identity_normalizer,
         }
         fit_dict = {
             "action": self.replay_buffer["action"],
@@ -141,25 +148,17 @@ class MultiModalDataset(BaseImageDataset):
             raise ValueError(idx)
 
     def postprocess(self, samples, device):
-        agent_pos = samples["state"].to(device, non_blocking=True)
-        head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0
-        action = samples["action"].to(device, non_blocking=True)
-        data = {
-            "obs": {
-                "head_cam": head_cam,  # B, T, 3, H, W
-                "agent_pos": agent_pos,  # B, T, D
-            },
-            "action": action,  # B, T, D
-        }
-        data = self.post_process_pntcloud(samples, data, device)
+        agent_pos = samples["state"].to(device, non_blocking=True) # B, T, D
+        head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0 # B, T, 3, H, W
+        action = samples["action"].to(device, non_blocking=True) # B, T, D
+        data = self.post_process_pntcloud(samples, agent_pos, head_cam, action, device)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data
 
-    def post_process_pntcloud(self, samples, data, device):
-        head_cam = data["obs"]["head_cam"]
-        agent_pos = data["obs"]["agent_pos"]
-        action = data["action"]
-        point_cloud = samples["head_camera_pnt_cloud"][...,:3].to(device, non_blocking=True)# B, T, 4096, 3
+    def post_process_pntcloud(self, samples, agent_pos, head_cam, action, device):
+        point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)# B, T, 4096, 6
+        if not self.pnt_cloud_with_rgb:
+            point_cloud = point_cloud[..., :3]# B, T, 4096, 3
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
             point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)# B, T, 4096, 3
@@ -176,26 +175,28 @@ class MultiModalDataset(BaseImageDataset):
                 for idx in range(self.n_obs_steps):
                     pntcloud = masked_pnt_cloud[idx].cpu().numpy()
                     coords = pntcloud[:, :3].astype(np.float32)
-                    colors = pntcloud[:, 3:6].astype(np.float32)
-                    pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
+                    if self.pnt_cloud_with_rgb:
+                        colors = pntcloud[:, 3:6].astype(np.float32)
+                        pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
+                    else:
+                        pcd_dict = self.transform_pcd({"coord": coords})
                     point_clouds.append(pcd_dict)
-                point_cloud_batch.append(point_clouds)
-            data = {
-                "obs": {
-                    "qpos": agent_pos,  # B, T, D
-                    "pcds": point_cloud_batch,  # B, n_obs_steps, Dict[coord, color, feat, offset]
-                },
-                "action": action,  # B, T, D
-            }
+                point_cloud_batch.append(point_clouds) # B, n_obs_steps, Dict[coord, color, feat, offset]
             flat_pcds = sum(point_cloud_batch, [])  # list of dict, length = B * n_obs_steps
 
             point_cloud = point_collate_fn(flat_pcds)
+            # {
+            #   'coord': Tensor[M,3],
+            #   'grid_coord': Tensor[M,3],
+            #   'feat': Tensor[M,F],
+            #   'offset': Tensor[B*n_obs_steps]
+            # }
 
         data =  {
             "obs": {
                 "head_cam": head_cam,  # B, T, 3, H, W
                 "agent_pos": agent_pos,  # B, T, D
-                "point_cloud": point_cloud,  # B, T, 4096, 6
+                "point_cloud": point_cloud,  # B, T, 4096, 6 or B, T, Dict
             },
             "action": action,  # B, T, D
         }

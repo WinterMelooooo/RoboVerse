@@ -134,6 +134,18 @@ def get_spUnet(**kwargs):
         from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.spUnet import SpUNet
     return SpUNet(**kwargs)
 
+def get_spUnet_encoder(**kwargs):
+    """
+    Returns a SpUNet encoder that outputs a feature map of shape (B, C, H, W)
+    """
+    try:
+        from .spUnet import SpUnetEncoder
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.spUnet import SpUNetEncoder
+    return SpUnetEncoder(**kwargs)
+
 
 def get_state_mlp(observation_space: Dict,
                   state_mlp_size=(64, 64),

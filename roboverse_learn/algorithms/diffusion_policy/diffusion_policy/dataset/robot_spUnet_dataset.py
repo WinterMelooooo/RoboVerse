@@ -256,7 +256,6 @@ class RobotPointCloudDataset(BaseImageDataset):
         data["obs"]["pcds"] = collated
         if hasattr(self, "task_goal"):
             goal_list = [self.task_goal] * B
-            # collate 后得到 {'task_emb': Tensor(B, C)}
             data["goal"] = default_collate(goal_list)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data

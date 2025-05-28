@@ -129,6 +129,13 @@ class MultiModalPolicy(BaseImagePolicy):
         assert "past_action" not in obs_dict  # not implemented yet
         # print("!!obs_dict", obs_dict["head_cam"].shape)
         # normalize input
+        pnt_cloud_spUnet = None
+        if "obs" in obs_dict and "point_cloud" in obs_dict["obs"]:
+            if isinstance(obs_dict["obs"]["point_cloud"], Dict):
+                pnt_cloud_spUnet = obs_dict["obs"].pop("point_cloud")
+        elif "point_cloud" in obs_dict:
+            if isinstance(obs_dict["obs"]["point_cloud"], Dict):
+                pnt_cloud_spUnet = obs_dict.pop("point_cloud")
         nobs = self.normalizer.normalize(obs_dict)
         # print("!!nobs", nobs["head_cam"].shape)
         value = next(iter(nobs.values()))
@@ -148,6 +155,8 @@ class MultiModalPolicy(BaseImagePolicy):
         if self.obs_as_global_cond:
             # condition through global feature
             this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
+            if pnt_cloud_spUnet is not None:
+                this_nobs["point_cloud"] = pnt_cloud_spUnet
             # print("!!To", To)
             # print(this_nobs["head_cam"].shape, this_nobs["agent_pos"].shape)
             nobs_features = self.obs_encoder(this_nobs)
@@ -160,6 +169,8 @@ class MultiModalPolicy(BaseImagePolicy):
         else:
             # condition through impainting
             this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
+            if pnt_cloud_spUnet is not None:
+                this_nobs["point_cloud"] = pnt_cloud_spUnet
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, T, Do
             nobs_features = nobs_features.reshape(B, To, -1)
@@ -196,6 +207,9 @@ class MultiModalPolicy(BaseImagePolicy):
     def compute_loss(self, batch):
         # normalize input
         assert "valid_mask" not in batch
+        pnt_cloud_spUnet = None
+        if isinstance(batch["obs"]["point_cloud"], Dict):
+            pnt_cloud_spUnet = batch["obs"].pop("point_cloud")
         nobs = self.normalizer.normalize(batch["obs"])
         nactions = self.normalizer["action"].normalize(batch["action"])
         batch_size = nactions.shape[0]
@@ -209,12 +223,16 @@ class MultiModalPolicy(BaseImagePolicy):
         if self.obs_as_global_cond:
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x[:, : self.n_obs_steps, ...].reshape(-1, *x.shape[2:]))
+            if pnt_cloud_spUnet is not None:
+                this_nobs["point_cloud"] = pnt_cloud_spUnet
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, Do
             global_cond = nobs_features.reshape(batch_size, -1)
         else:
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x.reshape(-1, *x.shape[2:]))
+            if pnt_cloud_spUnet is not None:
+                this_nobs["point_cloud"] = pnt_cloud_spUnet
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, T, Do
             nobs_features = nobs_features.reshape(batch_size, horizon, -1)

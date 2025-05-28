@@ -55,10 +55,22 @@ policy:
       name: resnet18
       weights: null
     pntcloud_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_spUnet
-      in_channels: 6
-      num_classes: 0
-      pretrained_path: null
+      _target_: diffusion_policy.model.vision.model_getter.get_spUnet_encoder
+      shape: ${shape_meta.obs.point_cloud.shape}
+      pcd_model:
+        _target_: diffusion_policy.model.vision.model_getter.get_spUnet
+        in_channels: 3
+        num_classes: 0
+        pretrained_path: null
+      n_obs_steps: ${n_obs_steps}
+      pcd_nsample: 16
+      pcd_npoints: 2048
+      use_mask: false
+      bg_ratio: 0.0
+      pcd_hidden_dim: 96
+      projector_layers: 2
+      projector_channels: ${task.shape_meta.obs.point_cloud.projector_channels}
+
     robot_state_model:
       _target_: diffusion_policy.model.vision.model_getter.get_identity
 
@@ -124,7 +136,7 @@ training:
   gradient_accumulate_every: 1
   # EMA destroys performance when used with BatchNorm
   # replace BatchNorm with GroupNorm.
-  use_ema: True
+  use_ema: False
   freeze_encoder: False
   # training loop control
   # in epochs
