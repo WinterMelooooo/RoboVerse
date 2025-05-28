@@ -134,7 +134,7 @@ class MultiModalPolicy(BaseImagePolicy):
             if isinstance(obs_dict["obs"]["point_cloud"], Dict):
                 pnt_cloud_spUnet = obs_dict["obs"].pop("point_cloud")
         elif "point_cloud" in obs_dict:
-            if isinstance(obs_dict["obs"]["point_cloud"], Dict):
+            if isinstance(obs_dict["point_cloud"], Dict):
                 pnt_cloud_spUnet = obs_dict.pop("point_cloud")
         nobs = self.normalizer.normalize(obs_dict)
         # print("!!nobs", nobs["head_cam"].shape)
