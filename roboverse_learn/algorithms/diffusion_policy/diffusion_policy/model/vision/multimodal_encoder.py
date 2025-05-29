@@ -8,9 +8,6 @@ import torchvision
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
-IMG_OBS_TYPES = ["rgb", "rgbd_resnet"]
-PNTCLOUD_OBS_TYPES = ["point_cloud"]
-ROBOT_STATE_OBS_TYPES = ["low_dim"]
 
 class ImgEncoderArgs():
     def __init__(self,
@@ -275,11 +272,10 @@ class MultiModalEncoder(ModuleAttrMixin):
         img_feats = [self.img_proj(f) for f in img_features]
         pc_feats = [self.pc_proj(f) for f in pntcloud_features]
         low_dim_feats = [self.state_proj(f) for f in low_dim_features]
-        features = img_feats + low_dim_feats + pc_feats
-        dims = [f.shape[-1] for f in features]
-        assert len(set(dims)) == 1, "All feature dims must be equal for cross-attention"
-        feat_stack = torch.stack(features, dim=0)
-        attn_output, _ = self.cross_attn(feat_stack, feat_stack, feat_stack)
+        main_feat = torch.stack(img_feats, dim=0)
+        key_feats = low_dim_feats + pc_feats
+        key_feats = torch.stack(key_feats, dim=0)
+        attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
         fused = attn_output.mean(dim=0)
         return fused
 

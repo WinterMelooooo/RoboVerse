@@ -16,13 +16,25 @@ from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from termcolor import cprint
 
-ROBOT_ROOT_STATE = torch.tensor(
-    [-0.6149997711181641, 0.0, 0.0,    # 根节点的位置 xyz
-      1.0, 0.0, 0.0, 0.0,              # 根节点的姿态四元数 wxyz
-      0.0, 0.0, 0.0,                   # 根节点的线速度 vx,vy,vz
-      0.0, 0.0, 0.0],                  # 根节点的角速度 wx,wy,wz
-    dtype=torch.float32
-)
+ROBOT_ROOT_STATES = {
+    "CloseBox" : torch.tensor(
+        [-0.26765137910842896, -0.0052999998442828655, 0.00031763582956045866,
+        0.999606728553772, 0.0002215634740423411, 0.0028197357896715403, -0.0061978623270988464,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        dtype=torch.float32),
+
+    "StackCube" : torch.tensor(
+        [-0.6149997711181641, 0.0, 0.0,
+         1.0, 0.0, 0.0, 0.0,
+         0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+         dtype=torch.float32),
+
+    "PickAlphabetSoup" : torch.tensor(
+        [-0.6106023788452148, 0.005089521408081055, 0.0,
+         1.0, 0.0, 0.0, 0.0,
+         0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+         dtype=torch.float32),
+}
 
 class RobotPointCloudDataset(BaseImageDataset):
     def __init__(
@@ -69,7 +81,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         self.pad_before = pad_before
         self.pad_after = pad_after
         self.norm_pnt_cloud = norm_pnt_cloud
-
+        self.name = zarr_path.split("/")[-1].split("_")[0]
         self.batch_size = batch_size
         sequence_length = self.sampler.sequence_length
         self.buffers = {
@@ -157,7 +169,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
-            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)# B, T, 4096, 6
+            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)# B, T, 4096, 6
             if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 6):
                 raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)")
         return {
@@ -169,12 +181,15 @@ class RobotPointCloudDataset(BaseImageDataset):
             "action": action,  # B, T, D
         }
 
-def transform_point_cloud(point_cloud, robot_root_state, device=None):
-    if device is None:
-        device = point_cloud.device
+def transform_point_cloud(point_cloud, robot_root_states, task_name, device=None):
     if isinstance(point_cloud, np.ndarray):
-        point_cloud = torch.from_numpy(point_cloud).to(device)
-    root_xyz = robot_root_state[:3].to(device)
+        point_cloud = torch.from_numpy(point_cloud).float().cuda()
+    robot_root_state = None
+    for key in robot_root_states:
+        if key.lower() in task_name.lower() or task_name.lower() in key.lower():
+            robot_root_state = robot_root_states[key]
+            break
+    root_xyz = robot_root_state[:3].cuda()
     coords = point_cloud[..., :3]
     colors = point_cloud[..., 3:]
     if coords.dim() == 4:

@@ -38,6 +38,7 @@ def main():
         "--calculate_mean_std", action="store_true", help="是否计算深度的均值和标准差"
     )
     parser.add_argument("--break_pnt_cloud", action="store_true", help="是否中断程序")
+    parser.add_argument("--get_bounding_box", action="store_true", help="是否获取点云的边界框")
     args = parser.parse_args()
 
     depth_dir = os.path.join(args.output_dir, "depth")
@@ -91,7 +92,7 @@ def main():
             np.moveaxis((depth_norm * 255).astype(np.uint8), 0, -1),
         )
 
-    if args.store_pnt_cloud:
+    if args.store_pnt_cloud or args.get_bounding_box:
         print(f"head_camera_pnt_cloud shape: {pnt_cloud_exp.shape}")
 
         try:
@@ -105,14 +106,29 @@ def main():
         total = len(pcd_dataset)
         if total == 0:
             raise ValueError("点云数据集为空")
-
+        sum_min = np.zeros(3, dtype=float)
+        sum_max = np.zeros(3, dtype=float)
+        count = 0
         for idx in tqdm(range(total)):
             your_pointcloud = pcd_dataset[idx]
             output_dir = os.path.join(pnt_cloud_dir, f"{idx}.npy")
-            np.save(output_dir, your_pointcloud)
-            if args.break_pnt_cloud:
-                break
+            if args.store_pnt_cloud:
+                np.save(output_dir, your_pointcloud)
+            if args.get_bounding_box:
+                # 计算当前点云的 bbox
+                min_vals = your_pointcloud[..., :3].min(axis=0)  # [min_x, min_y, min_z]
+                max_vals = your_pointcloud[..., :3].max(axis=0)  # [max_x, max_y, max_z]
 
+                # 累加
+                sum_min += min_vals
+                sum_max += max_vals
+                count += 1
+        if args.get_bounding_box:
+            print(
+                f"点云数据集的总边界框：\n"
+                f"最小值: {sum_min / count}\n"
+                f"最大值: {sum_max / count}"
+            )
         # 可视化
         print(f"可视化第 {idx} 个点云（共 {total} 个样本）")
         visualizer.visualize_pointcloud(your_pointcloud)

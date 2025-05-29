@@ -62,8 +62,9 @@ policy:
       final_norm: layernorm # layernorm, none
       normal_channel: false
     robot_state_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_state_mlp
-      observation_space: ${shape_meta.obs}
+      #_target_: diffusion_policy.model.vision.model_getter.get_state_mlp
+      #observation_space: ${shape_meta.obs}
+      _target_: diffusion_policy.model.vision.model_getter.get_identity
 
     img_encoder_args:
       resize_shape: null
@@ -139,7 +140,7 @@ training:
   # training loop control
   # in epochs
   rollout_every: 50
-  checkpoint_every: 1000
+  checkpoint_every: 200
   val_every: 5
   sample_every: 5
   # steps per epoch

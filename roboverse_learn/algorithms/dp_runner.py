@@ -170,8 +170,8 @@ class DPRunner(PolicyRunner):
         if "point_cloud" in self.yaml_cfg.task.shape_meta.obs.keys():
             obs_dict["point_cloud"] = obs["point_cloud"]
             if "norm_pnt_cloud" in self.yaml_cfg.task.dataset.keys() and not self.yaml_cfg.task.dataset.norm_pnt_cloud:
-                from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import ROBOT_ROOT_STATE, transform_point_cloud
-                obs_dict["point_cloud"] = transform_point_cloud(obs_dict["point_cloud"], ROBOT_ROOT_STATE, self.policy.device).cpu().numpy()
+                from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import ROBOT_ROOT_STATES, transform_point_cloud
+                obs_dict["point_cloud"] = transform_point_cloud(obs_dict["point_cloud"], ROBOT_ROOT_STATES, self.task_name, self.policy.device).cpu().numpy()
 
         if (
             "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()

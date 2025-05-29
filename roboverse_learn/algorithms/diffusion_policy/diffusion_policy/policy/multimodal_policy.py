@@ -153,12 +153,16 @@ class MultiModalPolicy(BaseImagePolicy):
         local_cond = None
         global_cond = None
         if self.obs_as_global_cond:
+            #for key, value in nobs.items():
+            #    print(f"Before Key: {key}, Value shape: {value.shape}")
             # condition through global feature
             this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
             if pnt_cloud_spUnet is not None:
                 this_nobs["point_cloud"] = pnt_cloud_spUnet
             # print("!!To", To)
             # print(this_nobs["head_cam"].shape, this_nobs["agent_pos"].shape)
+            #for key, value in this_nobs.items():
+            #    print(f"After Key: {key}, Value shape: {value.shape}")
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, Do
             # print("!!if", nobs_features.shape)
@@ -167,10 +171,14 @@ class MultiModalPolicy(BaseImagePolicy):
             cond_data = torch.zeros(size=(B, T, Da), device=device, dtype=dtype)
             cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
         else:
+            #for key, value in nobs.items():
+            #    print(f"Before Key: {key}, Value shape: {value.shape}")
             # condition through impainting
             this_nobs = dict_apply(nobs, lambda x: x[:, :To, ...].reshape(-1, *x.shape[2:]))
             if pnt_cloud_spUnet is not None:
                 this_nobs["point_cloud"] = pnt_cloud_spUnet
+            #for key, value in this_nobs.items():
+            #    print(f"After Key: {key}, Value shape: {value.shape}")
             nobs_features = self.obs_encoder(this_nobs)
             # reshape back to B, T, Do
             nobs_features = nobs_features.reshape(B, To, -1)

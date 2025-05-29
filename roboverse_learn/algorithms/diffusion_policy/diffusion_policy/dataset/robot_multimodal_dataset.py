@@ -16,7 +16,7 @@ from diffusion_policy.dataset.base_dataset import BaseImageDataset
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from termcolor import cprint
 from omegaconf import DictConfig
-from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import transform_point_cloud, ROBOT_ROOT_STATE
+from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import transform_point_cloud, ROBOT_ROOT_STATES
 from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_spUnet_dataset import point_collate_fn
 from typing import Any, Dict, List
 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
@@ -73,6 +73,7 @@ class MultiModalDataset(BaseImageDataset):
         self.grid_pnt_cloud = bool(transform_pcd is not None)
         self.batch_size = batch_size
         self.transform_pcd = ComposePCD(transform_pcd)
+        self.name = zarr_path.split("/")[-1].split("_")[0]
         sequence_length = self.sampler.sequence_length
         self.buffers = {
             k: np.zeros((batch_size, sequence_length, *v.shape[1:]), dtype=v.dtype)
@@ -161,7 +162,7 @@ class MultiModalDataset(BaseImageDataset):
             point_cloud = point_cloud[..., :3]# B, T, 4096, 3
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
-            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)# B, T, 4096, 3
+            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)# B, T, 4096, 3
             if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 3):
                 raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 3)")
 
@@ -201,6 +202,8 @@ class MultiModalDataset(BaseImageDataset):
             "action": action,  # B, T, D
         }
         return data
+
+
 
 def _batch_sample_sequence(
     data: np.ndarray,

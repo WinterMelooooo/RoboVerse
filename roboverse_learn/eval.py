@@ -203,7 +203,11 @@ def main():
                 cam_extr = obs.cameras["camera0"].extrinsics
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu())
                 new_obs["point_cloud"] = pnt_cloud
+                if not "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+                    new_obs["point_cloud"] = new_obs["point_cloud"][...,:3]
             images_list.append(np.array(new_obs["rgb"].cpu()))
+            #for key, value in new_obs.items():
+            #    print(f"Key: {key}, Value shape: {value.shape}")
             action = policyRunner.get_action(new_obs)
 
             for round_i in range(action_set_steps):

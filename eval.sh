@@ -1,6 +1,6 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export CUDA_VISIBLE_DEVICES=0
-ckpt=/scratch/current/yktang/data/checkpoints/RoboBench/2025.05.19_Finished_CloseBox_StackCube/2025.04.27/02.27.49_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/200.ckpt
+export CUDA_VISIBLE_DEVICES=2
+ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.05.29/04.32.17_Fusion_ResNet18_PointNet_Cat_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
 task=CloseBox
 num_envs=50
 random_level=0

@@ -4,7 +4,6 @@ import numpy as np
 import pytorch3d.ops as torch3d_ops
 import torch
 from termcolor import cprint
-
 sys.path.append(".")
 from roboverse_learn.algorithms.utils.pnt_cloud_generator import PointCloudGenerator
 
