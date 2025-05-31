@@ -62,8 +62,9 @@ policy:
       final_norm: layernorm # layernorm, none
       normal_channel: false
     robot_state_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_state_mlp
-      observation_space: ${shape_meta.obs}
+      #_target_: diffusion_policy.model.vision.model_getter.get_state_mlp
+      #observation_space: ${shape_meta.obs}
+      _target_: diffusion_policy.model.vision.model_getter.get_identity
 
     img_encoder_args:
       resize_shape: null
@@ -73,12 +74,13 @@ policy:
       imagenet_norm: True
 
     fusion_args:
-      fusion_method: cross_attention
+      fusion_method: cross_and_cat
       embed_dim: 256
       num_heads: 8
       img_dim: 512
       pc_dim: 128
-      state_dim: 64
+      #state_dim: 64
+      mutual_attention: True
 
 
   horizon: ${horizon}

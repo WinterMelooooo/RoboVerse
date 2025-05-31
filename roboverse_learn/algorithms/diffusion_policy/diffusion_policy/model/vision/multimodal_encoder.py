@@ -263,7 +263,16 @@ class MultiModalEncoder(ModuleAttrMixin):
             self.img_proj = nn.Linear(fusion_args.img_dim, embed_dim)
             self.pc_proj = nn.Linear(fusion_args.pc_dim, embed_dim)
             self.state_proj = nn.Linear(fusion_args.state_dim, embed_dim)
+            self.mutual_attention = fusion_args.mutual_attention
             return self._cross_attention_features
+        elif fusion_method == "cross_and_cat":
+            embed_dim = fusion_args.embed_dim
+            num_heads = fusion_args.num_heads
+            self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads)
+            self.img_proj = nn.Linear(fusion_args.img_dim, embed_dim)
+            self.pc_proj = nn.Linear(fusion_args.pc_dim, embed_dim)
+            self.mutual_attention = fusion_args.mutual_attention
+            return self.cross_and_cat
         else:
             raise ValueError(f"Unknown fusion method: {fusion_method}")
 
@@ -277,6 +286,10 @@ class MultiModalEncoder(ModuleAttrMixin):
         key_feats = torch.stack(key_feats, dim=0)
         attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
         fused = attn_output.mean(dim=0)
+
+        if self.mutual_attention:
+            attn_output, _ = self.cross_attn(key_feats, main_feat, main_feat)
+            fused += attn_output.mean(dim=0)
         return fused
 
 
@@ -286,3 +299,22 @@ class MultiModalEncoder(ModuleAttrMixin):
         """
         all_features = img_features + low_dim_features + pntcloud_features
         return torch.cat(all_features, dim=-1)
+
+
+    def cross_and_cat(self, img_features, low_dim_features, pntcloud_features):
+        """
+        Cross attention on image features and concatenate with low_dim and point cloud features.
+        """
+        img_feats = [self.img_proj(f) for f in img_features]
+        pc_feats = [self.pc_proj(f) for f in pntcloud_features]
+        low_dim_feats = [f for f in low_dim_features]
+
+        main_feat = torch.stack(img_feats, dim=0)
+        key_feats = torch.stack(pc_feats, dim=0)
+        attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
+        fused = attn_output.mean(dim=0)
+        if self.mutual_attention:
+            attn_output, _ = self.cross_attn(key_feats, main_feat, main_feat)
+            fused += attn_output.mean(dim=0)
+        fused = torch.cat([fused] + low_dim_feats, dim=-1)
+        return fused
