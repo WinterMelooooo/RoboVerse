@@ -2,7 +2,7 @@ defaults:
   - _self_
   - task: default_task_resnet_spUnet_cat
 
-encoder_name: Fusion_ResNet18_spUnet
+encoder_name: Fusion_ResNet18_spUnet_Cat
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
