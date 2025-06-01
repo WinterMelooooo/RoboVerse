@@ -37,6 +37,7 @@ class MultiModalDataset(BaseImageDataset):
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
         pnt_cloud_with_rgb=False,
+        add_depth=False,
     ):
 
         super().__init__()
@@ -45,7 +46,7 @@ class MultiModalDataset(BaseImageDataset):
         self.replay_buffer:ReplayBuffer = ReplayBuffer.copy_from_path(
             zarr_path,
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
-            keys=["head_camera", "state", "action", "head_camera_pnt_cloud"],
+            keys=["head_camera", "state", "action", "head_camera_pnt_cloud", "head_camera_depth"],
         )
         print(f"Replay buffer size: {self.replay_buffer.n_episodes}")
         keep_n_episodes = self.replay_buffer.n_episodes * max_visible_ratio / 100.0
@@ -83,6 +84,7 @@ class MultiModalDataset(BaseImageDataset):
         for v in self.buffers_torch.values():
             v.pin_memory()
         self.pnt_cloud_with_rgb = pnt_cloud_with_rgb
+        self.add_depth = add_depth
     def get_validation_dataset(self):
         val_set = copy.copy(self)
         val_set.sampler = SequenceSampler(
@@ -151,12 +153,14 @@ class MultiModalDataset(BaseImageDataset):
     def postprocess(self, samples, device):
         agent_pos = samples["state"].to(device, non_blocking=True) # B, T, D
         head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0 # B, T, 3, H, W
+        if self.add_depth:
+            head_cam = self.add_depth(samples, head_cam, device) # B, T, 4, H, W
         action = samples["action"].to(device, non_blocking=True) # B, T, D
-        data = self.post_process_pntcloud(samples, agent_pos, head_cam, action, device)
+        data = self.add_pntcloud(samples, agent_pos, head_cam, action, device)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data
 
-    def post_process_pntcloud(self, samples, agent_pos, head_cam, action, device):
+    def add_pntcloud(self, samples, agent_pos, head_cam, action, device):
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)# B, T, 4096, 6
         if not self.pnt_cloud_with_rgb:
             point_cloud = point_cloud[..., :3]# B, T, 4096, 3
@@ -203,7 +207,10 @@ class MultiModalDataset(BaseImageDataset):
         }
         return data
 
-
+    def add_depth(self, samples, head_cam, device):
+        depth = samples["head_camera_depth"][:,:,:1,:,:].to(device, non_blocking=True) / 255.0 # (B, T, 4, H, W) [0,1]
+        head_cam = torch.cat([head_cam, depth], dim=2)  # B, T, 4, H, W
+        return head_cam
 
 def _batch_sample_sequence(
     data: np.ndarray,

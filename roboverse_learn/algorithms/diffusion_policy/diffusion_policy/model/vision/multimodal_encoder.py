@@ -65,7 +65,8 @@ class MultiModalEncoder(ModuleAttrMixin):
             shape = tuple(attr["shape"])
             type = attr.get("type", "low_dim")
             key_shape_map[key] = shape
-            if type == "rgb" or type == "rgbd_resnet":
+
+            if type == "rgb" or type == "rgbd":
                 img_keys.append(key)
                 this_model = None
                 if isinstance(img_model, dict):
@@ -236,7 +237,7 @@ class MultiModalEncoder(ModuleAttrMixin):
             if type == "rgb":
                 mean = [0.485, 0.456, 0.406]
                 std = [0.229, 0.224, 0.225]
-            elif type == "rgbd_resnet":
+            elif type == "rgbd":
                 mean = [0.485, 0.456, 0.406, 0.308]
                 std = [0.229, 0.224, 0.225, 0.299]
             this_normalizer = torchvision.transforms.Normalize(
