@@ -37,7 +37,7 @@ class MultiModalDataset(BaseImageDataset):
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
         pnt_cloud_with_rgb=False,
-        add_depth=False,
+        rgb_with_depth=False,
     ):
 
         super().__init__()
