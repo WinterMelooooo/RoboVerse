@@ -84,7 +84,7 @@ class MultiModalDataset(BaseImageDataset):
         for v in self.buffers_torch.values():
             v.pin_memory()
         self.pnt_cloud_with_rgb = pnt_cloud_with_rgb
-        self.add_depth = add_depth
+        self.rgb_with_depth = rgb_with_depth
     def get_validation_dataset(self):
         val_set = copy.copy(self)
         val_set.sampler = SequenceSampler(
@@ -153,7 +153,7 @@ class MultiModalDataset(BaseImageDataset):
     def postprocess(self, samples, device):
         agent_pos = samples["state"].to(device, non_blocking=True) # B, T, D
         head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0 # B, T, 3, H, W
-        if self.add_depth:
+        if self.rgb_with_depth:
             head_cam = self.add_depth(samples, head_cam, device) # B, T, 4, H, W
         action = samples["action"].to(device, non_blocking=True) # B, T, D
         data = self.add_pntcloud(samples, agent_pos, head_cam, action, device)
