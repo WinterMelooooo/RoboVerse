@@ -36,7 +36,7 @@ class MultiModalDataset(BaseImageDataset):
         norm_pnt_cloud=False,
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
-        pnt_cloud_with_rgb=False,
+        pnt_cloud_with_extra=False,
         rgb_with_depth=False,
     ):
 
@@ -83,7 +83,7 @@ class MultiModalDataset(BaseImageDataset):
         self.buffers_torch = {k: torch.from_numpy(v) for k, v in self.buffers.items()}
         for v in self.buffers_torch.values():
             v.pin_memory()
-        self.pnt_cloud_with_rgb = pnt_cloud_with_rgb
+        self.pnt_cloud_with_extra = pnt_cloud_with_extra
         self.rgb_with_depth = rgb_with_depth
     def get_validation_dataset(self):
         val_set = copy.copy(self)
@@ -162,13 +162,14 @@ class MultiModalDataset(BaseImageDataset):
 
     def add_pntcloud(self, samples, agent_pos, head_cam, action, device):
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)# B, T, 4096, 6
-        if not self.pnt_cloud_with_rgb:
+        if not self.pnt_cloud_with_extra:
             point_cloud = point_cloud[..., :3]# B, T, 4096, 3
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
             point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)# B, T, 4096, 3
-            if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 3):
-                raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 3)")
+            last_dim = 3 if not self.pnt_cloud_with_extra else 8
+            if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == last_dim):
+                raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, {last_dim})")
 
 
         if self.grid_pnt_cloud:
@@ -180,7 +181,7 @@ class MultiModalDataset(BaseImageDataset):
                 for idx in range(self.n_obs_steps):
                     pntcloud = masked_pnt_cloud[idx].cpu().numpy()
                     coords = pntcloud[:, :3].astype(np.float32)
-                    if self.pnt_cloud_with_rgb:
+                    if self.pnt_cloud_with_extra:
                         colors = pntcloud[:, 3:6].astype(np.float32)
                         pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
                     else:

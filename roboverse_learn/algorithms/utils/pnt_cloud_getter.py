@@ -7,7 +7,7 @@ from termcolor import cprint
 sys.path.append(".")
 from roboverse_learn.algorithms.utils.pnt_cloud_generator import PointCloudGenerator
 
-DEBUG = False
+DEBUG = True
 
 ENV_POINT_CLOUD_CONFIG = {
     "CloseBox": {
@@ -132,13 +132,13 @@ class PntCloudGetter:
         save_img_dir = None
         if len(rgb.shape) == 3:
             point_cloud, depth = self.pc_generator.generateCroppedPointCloud(
-                rgb, depth, cam_intr, cam_extr, save_img_dir=save_img_dir
+                rgb, depth, cam_intr, cam_extr, save_img_dir=save_img_dir, debug=DEBUG
             )  # (N, 6), xyz+rgb
-            if DEBUG:
-                print(
-                    f"[({min(point_cloud[:, 0])}, {min(point_cloud[:, 1])}, {min(point_cloud[:, 2])}), ({max(point_cloud[:, 0])}, {max(point_cloud[:, 1])}, {max(point_cloud[:, 2])})]"
-                )
-                print(f"[{self.min_bound}, {self.max_bound}]")
+            #if DEBUG:
+            #    print(
+            #        f"[({min(point_cloud[:, 0])}, {min(point_cloud[:, 1])}, {min(point_cloud[:, 2])}), ({max(point_cloud[:, 0])}, {max(point_cloud[:, 1])}, {max(point_cloud[:, 2])})]"
+            #    )
+            #    print(f"[{self.min_bound}, {self.max_bound}]")
             # do transform, scale, offset, and crop
             if self.pc_transform is not None:
                 point_cloud[:, :3] = point_cloud[:, :3] @ self.pc_transform.T

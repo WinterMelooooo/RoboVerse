@@ -128,6 +128,7 @@ class PointNetEncoderXYZ(nn.Module):
         """
         super().__init__()
         block_channel = [64, 128, 256]
+        self.block_channel = block_channel
         cprint("[PointNetEncoderXYZ] use_layernorm: {}".format(use_layernorm), 'cyan')
         cprint("[PointNetEncoderXYZ] use_final_norm: {}".format(final_norm), 'cyan')
 
@@ -170,10 +171,11 @@ class PointNetEncoderXYZ(nn.Module):
             self.mlp[6].register_forward_hook(self.save_feature)
             self.mlp[6].register_backward_hook(self.save_gradient)
 
+        self.pool = lambda x: torch.max(x, 1)[0]  # max pooling
 
     def forward(self, x):
         x = self.mlp(x)
-        x = torch.max(x, 1)[0]
+        x = self.pool(x)
         x = self.final_projection(x)
         return x
 

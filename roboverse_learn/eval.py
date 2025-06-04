@@ -209,7 +209,6 @@ def main():
             #for key, value in new_obs.items():
             #    print(f"Key: {key}, Value shape: {value.shape}")
             action = policyRunner.get_action(new_obs)
-
             for round_i in range(action_set_steps):
                 obs, reward, success, time_out, extras = env.step(action)
 

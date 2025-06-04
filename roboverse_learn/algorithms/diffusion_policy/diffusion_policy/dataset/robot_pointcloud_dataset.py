@@ -166,7 +166,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         agent_pos = samples["state"].to(device, non_blocking=True)
         head_cam = samples["head_camera"].to(device, non_blocking=True) / 255.0
         action = samples["action"].to(device, non_blocking=True)
-        point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
+        point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)[..., :6]
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
             point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)# B, T, 4096, 6
@@ -191,7 +191,8 @@ def transform_point_cloud(point_cloud, robot_root_states, task_name, device=None
             break
     root_xyz = robot_root_state[:3].cuda()
     coords = point_cloud[..., :3]
-    colors = point_cloud[..., 3:]
+    colors = point_cloud[..., 3:6]
+    extra = point_cloud[..., 6:] if point_cloud.shape[-1] > 6 else None
     if coords.dim() == 4:
         root_pos = root_xyz.view(1, 1, 1, 3)
     elif coords.dim() == 3:
@@ -199,7 +200,7 @@ def transform_point_cloud(point_cloud, robot_root_states, task_name, device=None
     else:
         raise ValueError(f"Unexpected coords.dim() = {coords.dim()}")
     coords = coords - root_pos
-    return torch.cat([coords, colors], dim=-1)  # 保持 (B,T,N,6) 或 (B,N,6)
+    return torch.cat([coords, colors], dim=-1) if extra is None else torch.cat([coords, colors, extra], dim=-1)  # B, T, 4096, 6 or 3
 
 
 def _batch_sample_sequence(

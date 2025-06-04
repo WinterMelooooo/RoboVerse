@@ -3,6 +3,7 @@ import torchvision
 import torch.nn as nn
 from termcolor import cprint
 from typing import Optional, Dict, Tuple, Union, List, Type
+import types
 
 def get_resnet(name, weights=None, **kwargs):
     """
@@ -22,6 +23,26 @@ def get_resnet(name, weights=None, **kwargs):
     # )
     # return resnet_new
     return resnet
+
+def get_resnet_pixelwise(name, weights=None, **kwargs):
+    resnet = get_resnet(name, weights=weights, **kwargs)
+    resnet.avgpool = nn.Identity()
+    # 定义一个“去掉 flatten”的新 _forward_impl
+    def new_forward_impl(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        return self.fc(x)
+    resnet._forward_impl = types.MethodType(new_forward_impl, resnet)
+    return resnet
+
 def get_r3m(name, **kwargs):
     """
     name: resnet18, resnet34, resnet50
@@ -100,6 +121,11 @@ def get_pointnet(**kwargs):
     from .dp3_encoder import PointNetEncoderXYZ
     return PointNetEncoderXYZ(**kwargs)
 
+def get_pointnet_pointwise(pre_norm = True, **kwargs):
+    pntnet = get_pointnet(**kwargs)
+    pntnet.pool = nn.Identity()
+    pntnet.final_projection = nn.LayerNorm(pntnet.block_channel[-1]) if pre_norm else nn.Identity()
+    return pntnet
 
 def get_vit(name, **kwargs):
     """

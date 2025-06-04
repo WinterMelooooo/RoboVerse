@@ -1,8 +1,8 @@
 defaults:
   - _self_
-  - task: default_task_resnet_pointnet_mutual_attention
+  - task: default_task_resnet_pointnet_align_proj
 
-encoder_name: Fusion_ResNet18_PointNet_Mutual_Attention
+encoder_name: Fusion_ResNet18_PointNet_Align_Proj
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -51,11 +51,11 @@ policy:
     _target_: diffusion_policy.model.vision.multimodal_encoder.MultiModalEncoder
     shape_meta: ${shape_meta}
     img_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_resnet
+      _target_: diffusion_policy.model.vision.model_getter.get_resnet_pixelwise
       name: resnet18
       weights: null
     pntcloud_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_pointnet
+      _target_: diffusion_policy.model.vision.model_getter.get_pointnet_pointwise
       in_channels: 3
       out_channels: 128
       use_layernorm: true
@@ -74,15 +74,16 @@ policy:
       imagenet_norm: True
 
     fusion_args:
-      fusion_method: cross_attention
-      embed_dim: 256
-      num_heads: 8
-      img_dim: 512
-      pc_dim: 128
-      state_dim: 64
-      mutual_attention: True
-      post_fusion_func: sum
-      norm_proj: True
+      fusion_method: align_and_fusion
+      fusion_func: cat
+      fusion_params: null
+      post_fusion_func: maxpool
+      post_fusion_params: null
+      final_proj_func: linear
+      final_proj_params:
+        out_dim: ${policy.obs_encoder.pntcloud_model.out_channels}
+        norm: False
+
 
 
   horizon: ${horizon}

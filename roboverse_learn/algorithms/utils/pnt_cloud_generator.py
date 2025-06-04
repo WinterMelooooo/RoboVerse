@@ -150,7 +150,7 @@ class PointCloudGenerator(object):
 
         self.cam_names = cam_names
 
-    def generateCroppedPointCloud(self, rgb, depth, cam_intr, cam_extr, save_img_dir=None, device_id=0):
+    def generateCroppedPointCloud(self, rgb, depth, cam_intr, cam_extr, save_img_dir=None, device_id=0, debug=False):
         od_cammat = cammat2o3d(cam_intr, self.img_width, self.img_height)
         od_depth = o3d.geometry.Image(depth)
 
@@ -160,14 +160,66 @@ class PointCloudGenerator(object):
         # get numpy array of point cloud, (position, color)
         combined_cloud_points = np.asarray(transformed_cloud.points)
         # color is automatically normalized to [0,1] by open3d
-
+        H, W, _ = rgb.shape
+        N = len(combined_cloud_points)  # number of points
+        idx = np.arange(N, dtype=np.int32)  # (N,)
+        u = idx // W
+        v = idx % W
+        uv = np.stack([u, v], axis=1)       # (N,2)
         # combined_cloud_colors = np.asarray(combined_cloud.colors)  # Get the colors, ranging [0,1].
         combined_cloud_colors = rgb.reshape(-1, 3)  # range [0, 255]
         if not isinstance(combined_cloud_colors, np.ndarray):
             combined_cloud_colors = combined_cloud_colors.cpu().numpy()
-        combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors), axis=1)
+        combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors, uv), axis=1)
+        if debug:
+            #print(f"RGB shape: ({H}, {W})")
+            rows = combined_cloud[:, 6].astype(np.int64)  # (N,)
+            cols = combined_cloud[:, 7].astype(np.int64)  # (N,)
+            pixel_colors = rgb[rows, cols, :]            # (N,3)
+
+            # 再把 combined_cloud 里存的颜色取出来 (N,3)
+            stored_colors = combined_cloud[:, 3:6]       # (N,3)
+
+            # 逐行比较是否完全相等，axis=1 后返回 (N,) 的布尔数组
+            equal_mask = np.all(pixel_colors == stored_colors, axis=1)  # (N,)
+            if not np.all(equal_mask):
+                print("Warning: Not all colors match the original RGB image!")
+                self.plot_rgb_comparison(rgb, combined_cloud)
+                raise ValueError("Colors do not match the original RGB image!")
         return combined_cloud, depth
 
+
+    def plot_rgb_comparison(self, rgb_original, combined_cloud):
+        """
+        Plots the original RGB image and a reconstructed RGB image based on combined_cloud colors.
+        """
+        import matplotlib.pyplot as plt
+        # Extract dimensions
+        H, W, _ = rgb_original.shape
+
+        # Initialize a blank reconstructed image
+        reconstructed = np.zeros_like(rgb_original)
+
+        # Extract rows, cols, and stored colors from combined_cloud
+        rows = combined_cloud[:, 6].astype(np.int64)
+        cols = combined_cloud[:, 7].astype(np.int64)
+        stored_colors = combined_cloud[:, 3:6].astype(np.uint8)
+
+        # Assign stored colors to reconstructed image at the specified (row, col) positions
+        reconstructed[rows, cols] = stored_colors
+
+        # Plot side-by-side
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        axes[0].imshow(rgb_original.astype(np.uint8))
+        axes[0].set_title("Original RGB Image")
+        axes[0].axis('off')
+
+        axes[1].imshow(reconstructed)
+        axes[1].set_title("Reconstructed from combined_cloud")
+        axes[1].axis('off')
+
+        plt.tight_layout()
+        plt.show()
     # https://github.com/htung0101/table_dome/blob/master/table_dome_calib/utils.py#L160
     def depthimg2Meters(self, depth):
         extent = self.sim.model.stat.extent
