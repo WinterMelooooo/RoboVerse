@@ -204,7 +204,8 @@ def main():
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu())
                 new_obs["point_cloud"] = pnt_cloud
                 if not "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
-                    new_obs["point_cloud"] = new_obs["point_cloud"][...,:3]
+                    feat_dim = policyRunner.yaml_cfg.task.shape_meta.obs.point_cloud.shape[-1]
+                    new_obs["point_cloud"] = new_obs["point_cloud"][...,:feat_dim]
             images_list.append(np.array(new_obs["rgb"].cpu()))
             #for key, value in new_obs.items():
             #    print(f"Key: {key}, Value shape: {value.shape}")

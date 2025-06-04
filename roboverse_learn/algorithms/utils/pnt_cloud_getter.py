@@ -7,7 +7,7 @@ from termcolor import cprint
 sys.path.append(".")
 from roboverse_learn.algorithms.utils.pnt_cloud_generator import PointCloudGenerator
 
-DEBUG = True
+DEBUG = False
 
 ENV_POINT_CLOUD_CONFIG = {
     "CloseBox": {

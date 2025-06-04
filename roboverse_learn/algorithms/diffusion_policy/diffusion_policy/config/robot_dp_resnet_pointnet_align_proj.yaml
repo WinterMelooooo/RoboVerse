@@ -82,7 +82,7 @@ policy:
       final_proj_func: linear
       final_proj_params:
         out_dim: ${policy.obs_encoder.pntcloud_model.out_channels}
-        norm: False
+        norm: True
 
 
 

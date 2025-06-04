@@ -82,7 +82,7 @@ policy:
       state_dim: 64
       mutual_attention: True
       post_fusion_func: sum
-      norm_proj: True
+      norm_proj: False
 
 
   horizon: ${horizon}

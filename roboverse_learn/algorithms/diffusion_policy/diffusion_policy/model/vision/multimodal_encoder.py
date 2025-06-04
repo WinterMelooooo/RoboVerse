@@ -347,6 +347,7 @@ class MultiModalEncoder(ModuleAttrMixin):
                     self.final_proj,
                     nn.LayerNorm(final_proj_params["out_dim"])
                 )
+        self.norm_rgb_channel = nn.LayerNorm(512)
         return self._align_and_fusion_features
 
     def _align_and_fusion_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
@@ -367,7 +368,7 @@ class MultiModalEncoder(ModuleAttrMixin):
 
         # 3) 用花式索引一次性取出每个点在特征图上的 C_img 通道向量，得到 (B, N, C_img)
         img_feats_pts = feat_perm[batch_idx, rows, cols]  # (B, N, C_img)
-
+        img_feats_pts = self.norm_rgb_channel(img_feats_pts)  # (B, N, C_img)
         # 4) 拿到点云分支输出的 (B, N, C_p) 特征
         pc_feats = pntcloud_features[0]  # (B, N, C_p)
 
