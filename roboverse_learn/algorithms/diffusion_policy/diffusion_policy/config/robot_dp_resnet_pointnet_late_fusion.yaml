@@ -54,6 +54,7 @@ policy:
       _target_: diffusion_policy.model.vision.model_getter.get_late_fusion_resnet_dp3
       rgb_params:
         rgb_hidden_dim: 128
+        rgb_sample_mode: round
       pntcloud_params:
         pntcloud_in_channels: 3
         pntcloud_layernorm: true

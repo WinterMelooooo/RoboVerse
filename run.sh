@@ -1,9 +1,9 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=CloseBox
 level=0
-config_name=robot_dp_resnet_pointnet_early_fusion
+config_name=robot_dp_resnet_pointnet_late_fusion
 num_epochs=2000
-port=50086
+port=50089
 norm_pnt_cloud=0
 seed=42
 gpus=4,5,6,7

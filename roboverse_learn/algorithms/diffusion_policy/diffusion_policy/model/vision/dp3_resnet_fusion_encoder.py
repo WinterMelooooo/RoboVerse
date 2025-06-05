@@ -3,6 +3,7 @@ from torchvision.models import resnet18
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+from termcolor import cprint
 
 class FusionLateEncoder(nn.Module):
     def __init__(self, rgb_params, pntcloud_params, action_params, fusion_params, add_uv=False):
@@ -24,6 +25,8 @@ class FusionLateEncoder(nn.Module):
         self.fusion_params = fusion_params
         self.add_uv = add_uv
         self.rgb_shape = fusion_params.rgb_shape_meta[1:]
+        self.rgb_sample_mode = rgb_params.get("rgb_sample_mode", "bilinear")
+        cprint(f"[Fusion Late Encoder]Using RGB sample mode: {self.rgb_sample_mode}", 'cyan')
 
         self.resnet_out_channels = [64, 128, 256, 512]
         self.resnet = resnet18(weights=None)
@@ -110,11 +113,11 @@ class FusionLateEncoder(nn.Module):
         feat_map2 = self.resnet.layer2(rgb) #[B, 128, H/8, W/8]
         feat_map3 = self.resnet.layer3(feat_map2) # [B, 256, H/16, W/16]
         feat_map4 = self.resnet.layer4(feat_map3) # [B, 512, H/32, W/32]
-        feat2 = self._sample_features_from_uv(feat_map2, uv, self.rgb_shape, sample_mode) # [B, N, 128]
+        feat2 = self._sample_features_from_uv(feat_map2, uv, self.rgb_shape, self.rgb_sample_mode) # [B, N, 128]
         feat2 = self.resnet.mlp_layer2(feat2) # [B, N, rgb_hidden_dim]
-        feat3 = self._sample_features_from_uv(feat_map3, uv, self.rgb_shape, sample_mode) # [B, N, 256]
+        feat3 = self._sample_features_from_uv(feat_map3, uv, self.rgb_shape, self.rgb_sample_mode) # [B, N, 256]
         feat3 = self.resnet.mlp_layer3(feat3) # [B, N, rgb_hidden_dim]
-        feat4 = self._sample_features_from_uv(feat_map4, uv, self.rgb_shape, sample_mode) # [B, N, 512]
+        feat4 = self._sample_features_from_uv(feat_map4, uv, self.rgb_shape, self.rgb_sample_mode) # [B, N, 512]
         feat4 = self.resnet.mlp_layer4(feat4) # [B, N, rgb_hidden_dim]
         img_feats = torch.cat([feat2, feat3, feat4], dim=-1) # [B, N, 3*rgb_hidden_dim]
         return img_feats
@@ -137,22 +140,38 @@ class FusionLateEncoder(nn.Module):
             torch.Tensor: [B, N, C]。
                 ret[i, j, k] Stands for the value i-th batch, j-th point, and k-th channel.
         """
-        img_h, img_w = img_shape
+        if sample_mode == "bilinear":
+            img_h, img_w = img_shape
 
-        x_norm = (uv[..., 1] / (img_w - 1)) * 2 - 1  # [-1,1]
-        y_norm = (uv[..., 0] / (img_h - 1)) * 2 - 1  # [-1,1]
-        grid = torch.stack((x_norm, y_norm), dim=-1)   # [B, N, 2]
-        grid = grid.unsqueeze(2) # [B, N, 1, 2]
-        sampled = F.grid_sample(feat_map,
-                                grid,
-                                mode=sample_mode,
-                                padding_mode='border',
-                                align_corners=True) # [B, C, N, 1]
+            x_norm = (uv[..., 1] / (img_w - 1)) * 2 - 1  # [-1,1]
+            y_norm = (uv[..., 0] / (img_h - 1)) * 2 - 1  # [-1,1]
+            grid = torch.stack((x_norm, y_norm), dim=-1)   # [B, N, 2]
+            grid = grid.unsqueeze(2) # [B, N, 1, 2]
+            sampled = F.grid_sample(feat_map,
+                                    grid,
+                                    mode=sample_mode,
+                                    padding_mode='border',
+                                    align_corners=True) # [B, C, N, 1]
 
-        sampled = sampled.squeeze(-1)       # [B, C, N]
-        sampled = sampled.permute(0, 2, 1)  # [B, N, C]
+            sampled = sampled.squeeze(-1)       # [B, C, N]
+            sampled = sampled.permute(0, 2, 1)  # [B, N, C]
 
-        return sampled
+            return sampled
+        elif sample_mode == "round":
+            H, W = img_shape
+            H_Down, W_Down = feat_map[0].shape[-2:]
+            down_sample_ratio_U = H // H_Down
+            down_sample_ratio_V = W // W_Down
+            uv = (uv // torch.tensor([down_sample_ratio_U, down_sample_ratio_V], device=uv.device)).long()
+            feat_perm = feat_map.permute(0, 2, 3, 1).contiguous()  # (B, C_img, H_down, W_down) -> (B, H_down, W_down, C_img)
+            B, N = uv.shape[:2]  # (B, N)
+            batch_idx = torch.arange(B, device=uv.device).unsqueeze(1).expand(B, N)  # (B, N)
+            rows = uv[..., 0]  # (B, N)
+            cols = uv[..., 1]  # (B, N)
+
+            # 3) 用花式索引一次性取出每个点在特征图上的 C_img 通道向量，得到 (B, N, C_img)
+            img_feats_pts = feat_perm[batch_idx, rows, cols]  # (B, N, C_img)
+            return img_feats_pts
 
 
 class FusionEarlyEncoder(nn.Module):
