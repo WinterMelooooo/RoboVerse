@@ -366,13 +366,12 @@ class MultiModalEncoder(ModuleAttrMixin):
         rows = uv[..., 0]  # (B, N)
         cols = uv[..., 1]  # (B, N)
 
-        # 3) 用花式索引一次性取出每个点在特征图上的 C_img 通道向量，得到 (B, N, C_img)
+
         img_feats_pts = feat_perm[batch_idx, rows, cols]  # (B, N, C_img)
         img_feats_pts = self.norm_rgb_channel(img_feats_pts)  # (B, N, C_img)
-        # 4) 拿到点云分支输出的 (B, N, C_p) 特征
+
         pc_feats = pntcloud_features[0]  # (B, N, C_p)
 
-        # 5) 将“图像特征 (C_img)”与“点云特征 (C_p)”在最后一个维度拼接，得到 (B, N, C_img + C_p)
         fused_feats = self.post_align_fusion_func(img_feats_pts, pc_feats)  # (B, N, C_img + C_p)
         fused_feats = self.post_fusion_func(fused_feats)  # (B, C_img + C_p)
         fused_feats = self.final_proj(fused_feats)  # (B, out_dim)

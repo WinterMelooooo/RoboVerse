@@ -143,8 +143,8 @@ class FusionLateEncoder(nn.Module):
         if sample_mode == "bilinear":
             img_h, img_w = img_shape
 
-            x_norm = (uv[..., 1] / (img_w - 1)) * 2 - 1  # [-1,1]
-            y_norm = (uv[..., 0] / (img_h - 1)) * 2 - 1  # [-1,1]
+            x_norm = (uv[..., 1] / (img_w-1)) * 2 - 1  # [-1,1]
+            y_norm = (uv[..., 0] / (img_h-1)) * 2 - 1  # [-1,1]
             grid = torch.stack((x_norm, y_norm), dim=-1)   # [B, N, 2]
             grid = grid.unsqueeze(2) # [B, N, 1, 2]
             sampled = F.grid_sample(feat_map,
@@ -309,8 +309,8 @@ class FusionEarlyEncoder(nn.Module):
         """
         img_h, img_w = img_shape
 
-        x_norm = (uv[..., 1] / (img_w - 1)) * 2 - 1  # [-1,1]
-        y_norm = (uv[..., 0] / (img_h - 1)) * 2 - 1  # [-1,1]
+        x_norm = (uv[..., 1] / (img_w-1)) * 2 - 1  # [-1,1]
+        y_norm = (uv[..., 0] / (img_h-1)) * 2 - 1  # [-1,1]
         grid = torch.stack((x_norm, y_norm), dim=-1)   # [B, N, 2]
         grid = grid.unsqueeze(2) # [B, N, 1, 2]
         sampled = F.grid_sample(feat_map,
