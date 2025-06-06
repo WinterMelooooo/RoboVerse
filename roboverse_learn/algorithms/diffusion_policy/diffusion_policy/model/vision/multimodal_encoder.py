@@ -279,6 +279,8 @@ class MultiModalEncoder(ModuleAttrMixin):
             all_params = list(sig.parameters.keys())   # ['self', 'embed_dim', 'num_heads', ...]
             kwargs = {k: fusion_args[k] for k in all_params if k in fusion_args}
             return self._get_algin_and_fusion_func(**kwargs)
+        elif fusion_method == "perceiver":
+            raise NotImplementedError("Perceiver fusion method is not implemented yet.")
         else:
             raise ValueError(f"Unknown fusion method: {fusion_method}")
 
@@ -289,8 +291,10 @@ class MultiModalEncoder(ModuleAttrMixin):
                              state_dim: int,
                              mutual_attention: bool = True,
                              post_fusion_func: str = "sum",
-                             norm_proj: bool = False):
+                             norm_proj: bool = False,
+                             use_residual: bool = False,):
             self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads)
+            self.use_residual = use_residual
             if norm_proj:
                 num_groups = embed_dim // 16 if embed_dim % 16 == 0 else embed_dim // 8
                 self.img_norm_layer = nn.GroupNorm(
@@ -327,6 +331,34 @@ class MultiModalEncoder(ModuleAttrMixin):
             else:
                 raise ValueError(f"Unknown post_fusion_func: {post_fusion_func}")
             return self._cross_attention_features
+
+
+    def _cross_attention_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
+        img_feats = [self.img_proj(f) for f in img_features] # [B, embed_dim]
+        pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [B, embed_dim]
+        low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [B, embed_dim]
+        main_feat = torch.stack(img_feats, dim=0)
+        key_feats = low_dim_feats + pc_feats
+        key_feats = torch.stack(key_feats, dim=0)
+        attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
+        if self.use_residual:
+            attn_output = attn_output + main_feat
+        fused = attn_output.mean(dim=0)
+        if self.mutual_attention:
+            attn_output, attn_map = self.cross_attn(key_feats, main_feat, main_feat)
+            if self.use_residual:
+                attn_output = attn_output + key_feats
+            if self.post_fusion_func == "sum":
+                fused += attn_output.mean(dim=0)
+            elif self.post_fusion_func == "mlp":
+                fused = torch.cat([fused, attn_output.mean(dim=0)], dim=-1)
+                fused = self.post_fusion_mlp(fused)
+            elif self.post_fusion_func == "cat":
+                fused = torch.cat([fused, attn_output.mean(dim=0)], dim=-1)
+            else:
+                raise ValueError(f"Unknown post_fusion_func: {self.post_fusion_func}")
+        return fused
+
 
     def _get_algin_and_fusion_func(self, fusion_func, fusion_params, post_fusion_func, post_fusion_params, final_proj_func, final_proj_params):
         if fusion_func == "cat":
@@ -378,37 +410,12 @@ class MultiModalEncoder(ModuleAttrMixin):
         fused_feats = torch.cat([fused_feats, low_dim_features[0]], dim=-1)  # (B, out_dim + C_low_dim)
         return fused_feats
 
-
-    def _cross_attention_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
-        img_feats = [self.img_proj(f) for f in img_features]
-        pc_feats = [self.pc_proj(f) for f in pntcloud_features]
-        low_dim_feats = [self.state_proj(f) for f in low_dim_features]
-        main_feat = torch.stack(img_feats, dim=0)
-        key_feats = low_dim_feats + pc_feats
-        key_feats = torch.stack(key_feats, dim=0)
-        attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
-        fused = attn_output.mean(dim=0)
-        if self.mutual_attention:
-            attn_output, attn_map = self.cross_attn(key_feats, main_feat, main_feat)
-            if self.post_fusion_func == "sum":
-                fused += attn_output.mean(dim=0)
-            elif self.post_fusion_func == "mlp":
-                fused = torch.cat([fused, attn_output.mean(dim=0)], dim=-1)
-                fused = self.post_fusion_mlp(fused)
-            elif self.post_fusion_func == "cat":
-                fused = torch.cat([fused, attn_output.mean(dim=0)], dim=-1)
-            else:
-                raise ValueError(f"Unknown post_fusion_func: {self.post_fusion_func}")
-        return fused
-
-
     def _cat_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
         """
         Concatenate all features along the last dimension.
         """
         all_features = img_features + low_dim_features + pntcloud_features
         return torch.cat(all_features, dim=-1)
-
 
     def _cross_and_cat(self, img_features, low_dim_features, pntcloud_features, extra=None):
         """

@@ -83,6 +83,7 @@ policy:
       mutual_attention: True
       post_fusion_func: sum
       norm_proj: False
+      use_residual: True
 
 
   horizon: ${horizon}
