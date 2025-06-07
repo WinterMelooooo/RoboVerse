@@ -167,12 +167,14 @@ def main():
         log.info(f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!")
         from roboverse_learn.algorithms.utils.random_state import state_stats, generate_random_states
         delta = args.task_id_range_high - num_demos
-        state_dict = state_stats[args.task] # min, max, mean, std
-        new_states = generate_random_states(state_dict, delta)
+        stat_dict = state_stats[args.task] # min, max, mean, std
+        new_states = generate_random_states(stat_dict, delta)
         init_states = init_states + new_states
         log.info(f"Generated {delta} random states for OOD testing, total demos: {len(init_states)}")
         num_demos = len(init_states)
-
+    from roboverse_learn.algorithms.utils.random_state import plot_state_distributions
+    plot_state_distributions(init_states, bins=50)
+    raise ValueError()
     total_success = 0
     total_completed = 0
     if args.max_demo is None:

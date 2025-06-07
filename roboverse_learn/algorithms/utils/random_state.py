@@ -2,19 +2,22 @@ from torch import tensor
 state_stats = {
     "CloseBox":
     {
-        'objects': {'box_base': {'dof_pos': {'box_joint': (2.3635616302490234,
-                                                    2.3660526275634766,
-                                                    2.3641693592071533,
-                                                    0.0007281582220457494)},
-                          'pos': (tensor([0.1686, 0.0390, 0.0747]),
-                                  tensor([0.3765, 0.2970, 0.0747]),
-                                  tensor([0.2805, 0.1651, 0.0747]),
-                                  tensor([0.0391, 0.0743, 0.0000])),
+        'objects': {'box_base': {
+            'dof_pos': {
+                          'box_joint': (2.3635616302490234,
+                                        2.3660526275634766,
+                                        2.3641693592071533,
+                                        0.0007281582220457494)},
+                          'pos': (tensor([0.1686, 0.0390, 0.0747]), # min
+                                  tensor([0.3765, 0.2970, 0.0747]), # max
+                                  tensor([0.2805, 0.1651, 0.0747]), # mean
+                                  tensor([0.0391, 0.0743, 0.0000])), # std
                           'rot': (tensor([ 0.6936, -0.1376, -0.7071, -0.1376]),
                                   tensor([ 0.7071,  0.0780, -0.6936,  0.0780]),
                                   tensor([ 0.7019, -0.0614, -0.7019, -0.0614]),
                                   tensor([0.0042, 0.0595, 0.0042, 0.0595]))}},
-        'robots': {'franka': {'dof_pos': {'panda_finger_joint1': (0.03999445587396622,
+        'robots': {'franka': {'dof_pos': {
+                                   'panda_finger_joint1': (0.03999445587396622,
                                                            0.04000464826822281,
                                                            0.03999971225857735,
                                                            2.0187230802548584e-06),
@@ -122,10 +125,17 @@ def generate_random_states(state_dict, max_demos, seed=42):
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
+        torch.manual_seed(seed)
     def sample_once(stats):
         # 如果是子字典，则递归
         if isinstance(stats, dict):
-            return {k: sample_once(stats[k]) for k in stats}
+            dic = {}
+            for k, v in stats.items():
+                if k == "rot":
+                    dic[k] = sample_norm(v)
+                else:
+                    dic[k] = sample_once(v)
+            return dic
 
         # 叶子节点：拆四元组
         min_val, max_val, mean_val, std_val = stats
@@ -149,6 +159,57 @@ def generate_random_states(state_dict, max_demos, seed=42):
             return arr
 
         raise TypeError(f"Unsupported stats type: {type(mean_val)}")
+    def sample_norm(stats):
+        """专门处理 pos：按 mean/std 做高斯采样，再 clamp 到 [min, max]。"""
+        min_v, max_v, mean_v, std_v = stats
+        # 如果 mean_v 是 Tensor
+        if torch.is_tensor(mean_v):
+            x = torch.normal(mean=mean_v, std=std_v)
+            if not (std_v == 0).all():
+                x[2] = x[0]
+                x[3] = x[1]
+            return torch.clamp(x, min=min_v, max=max_v)
+        raise TypeError(f"Unsupported norm stats type: {type(mean_v)}")
 
     # 为每一个 demo 采样一次
     return [sample_once(state_dict) for _ in range(max_demos)]
+
+
+
+import matplotlib.pyplot as plt
+from collections import defaultdict
+def plot_state_distributions(states, bins=50):
+    """
+    对于一组 init_states，提取其中所有的 pos、rot、dof_pos 数值，
+    并为每个名称 + 维度画出一个直方图。
+
+    参数:
+        states: list of dict, 每个元素格式同题主给出的 init_states
+        bins: int, 直方图的柱子数
+    """
+    data = defaultdict(list)
+
+    for st in states:
+        # 先遍历 objects 和 robots 两个大类
+        for category in ('objects', 'robots'):
+            for name, ent in st[category].items():
+                # 提取 pos, rot
+                for key in ('pos', 'rot'):
+                    if key in ent:
+                        vals = ent[key]
+                        for i, v in enumerate(vals):
+                            data[f"{category}.{name}.{key}[{i}]"].append(v.item())
+                # 提取每个 dof_pos
+                for joint, v in ent.get('dof_pos', {}).items():
+                    data[f"{category}.{name}.dof_pos.{joint}"].append(v)
+
+    # 为每个维度绘制直方图
+    for key, vals in data.items():
+        plt.figure(figsize=(4,3))
+        plt.hist(vals, bins=bins)
+        plt.title(key)
+        plt.xlabel("Value")
+        plt.ylabel("Count")
+        plt.tight_layout()
+
+    plt.show()

@@ -3,10 +3,10 @@ task_name=CloseBox
 level=2
 config_name=robot_dp_pntcloud
 num_epochs=2000
-port=50092
-norm_pnt_cloud=0
+port=50093
+norm_pnt_cloud=1
 seed=42
-gpus=4,5,6,7
+gpus=0,1,2,3,4,5,6,7
 strategy=sqrt
 train_ratio=100
 bash roboverse_learn/algorithms/diffusion_policy/train_dp.sh roboverse_demo/demo_isaaclab/"${task_name}"-Level"${level}"/robot-franka "${task_name}"FrankaL"${level}" 100 "${gpus}" "${num_epochs}" joint_pos joint_pos 0 1 1 "${config_name}" "${port}" ${train_ratio} ${strategy} ${seed} ${norm_pnt_cloud}
