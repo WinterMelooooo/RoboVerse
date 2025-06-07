@@ -162,6 +162,12 @@ def main():
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
 
+    #from roboverse_learn.algorithms.utils.random_state import compute_stats, plot_state_distributions_grid
+    #stats_dict = compute_stats(init_states)
+    #import pprint
+    #pprint.pprint(stats_dict)
+    #plot_state_distributions_grid(init_states, save_path=f"tmp/tmp_StackCube", bins=50, cols=8)
+    #raise ValueError()
 
     if args.task_id_range_high > num_demos:
         log.info(f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!")
@@ -172,9 +178,6 @@ def main():
         init_states = init_states + new_states
         log.info(f"Generated {delta} random states for OOD testing, total demos: {len(init_states)}")
         num_demos = len(init_states)
-    from roboverse_learn.algorithms.utils.random_state import plot_state_distributions
-    plot_state_distributions(init_states, bins=50)
-    raise ValueError()
     total_success = 0
     total_completed = 0
     if args.max_demo is None:
