@@ -162,6 +162,17 @@ def main():
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
 
+
+    if args.task_id_range_high > num_demos:
+        log.info(f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!")
+        from roboverse_learn.algorithms.utils.random_state import state_stats, generate_random_states
+        delta = args.task_id_range_high - num_demos
+        state_dict = state_stats[args.task] # min, max, mean, std
+        new_states = generate_random_states(state_dict, delta)
+        init_states = init_states + new_states
+        log.info(f"Generated {delta} random states for OOD testing, total demos: {len(init_states)}")
+        num_demos = len(init_states)
+
     total_success = 0
     total_completed = 0
     if args.max_demo is None:
@@ -169,9 +180,9 @@ def main():
     else:
         max_demos = args.max_demo
     max_demos = min(max_demos, num_demos)
+
     for demo_start_idx in range(args.task_id_range_low, args.task_id_range_low + max_demos, num_envs):
         demo_end_idx = min(demo_start_idx + num_envs, num_demos)
-
         ## Reset before first step
         tic = time.time()
         obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])

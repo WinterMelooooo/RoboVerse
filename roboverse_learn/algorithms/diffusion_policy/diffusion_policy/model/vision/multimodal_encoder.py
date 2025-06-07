@@ -8,6 +8,7 @@ import torchvision
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
+from termcolor import cprint
 
 class ImgEncoderArgs():
     def __init__(self,
@@ -295,6 +296,9 @@ class MultiModalEncoder(ModuleAttrMixin):
                              use_residual: bool = False,):
             self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads)
             self.use_residual = use_residual
+            cprint(f"[Cross Attention]: use residual: {use_residual}", "cyan")
+            cprint(f"[Cross Attention]: mutual_attention: {mutual_attention}", "cyan")
+            cprint(f"[Cross Attention]: post_fusion_func: {post_fusion_func}", "cyan")
             if norm_proj:
                 num_groups = embed_dim // 16 if embed_dim % 16 == 0 else embed_dim // 8
                 self.img_norm_layer = nn.GroupNorm(
@@ -334,12 +338,12 @@ class MultiModalEncoder(ModuleAttrMixin):
 
 
     def _cross_attention_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
-        img_feats = [self.img_proj(f) for f in img_features] # [B, embed_dim]
-        pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [B, embed_dim]
-        low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [B, embed_dim]
-        main_feat = torch.stack(img_feats, dim=0)
-        key_feats = low_dim_feats + pc_feats
-        key_feats = torch.stack(key_feats, dim=0)
+        img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
+        pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
+        low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [N3, B, embed_dim]
+        main_feat = torch.stack(img_feats, dim=0) # [N1, B, embed_dim]
+        key_feats = low_dim_feats + pc_feats # [N2+N3, B, embed_dim]
+        key_feats = torch.stack(key_feats, dim=0) # [N2+N3, B, embed_dim]
         attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
         if self.use_residual:
             attn_output = attn_output + main_feat

@@ -4,5 +4,7 @@ ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.06.05/22.48.56_Fusion_ResNe
 task=CloseBox
 num_envs=1
 random_level=2
-python roboverse_learn/eval.py --task ${task} --algo diffusion_policy --max_step 500 --num_envs ${num_envs} --task_id_range_low 0 --task_id_range_high 100 --random.level ${random_level} --headless --checkpoint_path ${ckpt}
+task_id_range_low=100
+task_id_range_high=200
+python roboverse_learn/eval.py --task ${task} --algo diffusion_policy --max_step 500 --num_envs ${num_envs} --task_id_range_low ${task_id_range_low} --task_id_range_high ${task_id_range_high} --random.level ${random_level} --headless --checkpoint_path ${ckpt}
 #python roboverse_learn/eval.py --task StackCube --algo diffusion_policy --max_step 500 --num_envs 50 --task_id_range_low 0 --task_id_range_high 100 --random.level 0 --headless --checkpoint_path /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.05.10/19.32.51_rgbd_vit_StackCubeFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
