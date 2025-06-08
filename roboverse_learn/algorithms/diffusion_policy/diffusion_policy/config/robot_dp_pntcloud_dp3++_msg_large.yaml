@@ -73,7 +73,7 @@ policy:
 
 
   pointcloud_encoder_cfg:
-    n_points: [128, 32]            # 2048→128→32→global
+    n_points: [512, 128]            # 2048→128→32→global
     L_radius_list:
       - [0.1, 0.2]
       - [0.2, 0.4]
