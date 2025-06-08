@@ -1,11 +1,11 @@
 defaults:
   - _self_
-  - task: default_task_pntcloud
+  - task: default_task_pntcloud_dp++
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
 
-encoder_name: PntCloud_DP3
+encoder_name: PntCloud_DP++_Single_Large
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
@@ -69,16 +69,22 @@ policy:
   shape_meta: ${shape_meta}
 
   use_pc_color: false
-  pointnet_type: "pointnet"
+  pointnet_type: "pointnet2"
 
 
   pointcloud_encoder_cfg:
-    in_channels: 3
-    out_channels: ${policy.encoder_output_dim}
-    use_layernorm: true
-    final_norm: layernorm # layernorm, none
-    normal_channel: false
-
+    n_points: [512, 128]
+    L_radius_list:
+      - [0.2]
+      - [0.4]
+    L_nsample_list: # max number of sampled points in each local region
+      - [32]
+      - [64]
+    L_mlp_list:
+      - [[64, 64, 128]]
+      - [[128,128,256]]
+      - [[256,512,1024]]
+    out_channels: ${policy.encoder_output_dim}  # 64
 
 
   # scheduler.step params
