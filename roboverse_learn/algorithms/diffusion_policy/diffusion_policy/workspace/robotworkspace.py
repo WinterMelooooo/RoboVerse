@@ -14,9 +14,9 @@ sys.path.append(".")
 
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
-from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to
+from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to, update_optimizer
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
-from diffusion_policy.model.common.lr_scheduler import get_scheduler
+from diffusion_policy.model.common.lr_scheduler import get_composite_scheduler, get_scheduler
 from diffusion_policy.model.diffusion.ema_model import EMAModel
 from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
@@ -38,8 +38,16 @@ class RobotWorkspace(BaseWorkspace):
         policy = cfg.optimizer.get("multigpu_lr_policy", None)
         if not policy or policy == "sqrt":
             cfg.optimizer.lr = cfg.optimizer.lr * math.sqrt(self.world_size)
+            if cfg.get("param_groups", None):
+                for pg in cfg.param_groups:
+                    if "lr" in pg:
+                        pg["lr"] = pg["lr"] * math.sqrt(self.world_size)
         elif policy == "linear":
             cfg.optimizer.lr = cfg.optimizer.lr * self.world_size
+            if cfg.get("param_groups", None):
+                for pg in cfg.param_groups:
+                    if "lr" in pg:
+                        pg["lr"] = pg["lr"] * math.sqrt(self.world_size)
         else:
             raise ValueError(
                 f"Unknown multigpu_lr_policy {policy}, only sqrt and linear are supported"
@@ -70,6 +78,9 @@ class RobotWorkspace(BaseWorkspace):
         self.optimizer = hydra.utils.instantiate(
             cfg.optimizer, params=self.model.parameters()
         )
+        self.optimizer = update_optimizer(
+            self.optimizer, self.model, cfg.get("param_groups", None)
+        )
         # configure training state
         self.global_step = 0
         self.epoch = 0
@@ -90,28 +101,31 @@ class RobotWorkspace(BaseWorkspace):
         val_dataloader = create_dataloader(
             val_dataset, **cfg.val_dataloader, multi_gpu=self.world_size > 1
         )
-        # configure lr scheduler
-        if cfg.training.lr_scheduler == "OneCycleLR":
-            kwargs = dict(cfg.training.lr_scheduler_params)  # 或者用 OmegaConf.to_container(...)
-            effective_steps = len(train_dataloader) // cfg.training.gradient_accumulate_every
-            kwargs["steps_per_epoch"] = effective_steps
-            kwargs["epochs"] = cfg.training.num_epochs
-            self.lr_scheduler = get_scheduler(
-                cfg.training.lr_scheduler,
-                optimizer=self.optimizer,
-                **kwargs,
-            )
-        else:
-            self.lr_scheduler = get_scheduler(
-                cfg.training.lr_scheduler,
-                optimizer=self.optimizer,
-                num_warmup_steps=cfg.training.lr_warmup_steps // self.world_size,
-                num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
-                // cfg.training.gradient_accumulate_every,
-                # pytorch assumes stepping LRScheduler every epoch
-                # however huggingface diffusers steps it every batch
-                last_epoch=self.global_step - 1,
-            )
+
+        #warm_up_steps = cfg.training.lr_warmup_steps
+        warm_up_steps = cfg.training.lr_warmup_steps // self.world_size
+        self.lr_scheduler = get_composite_scheduler(
+            cfg.training.lr_scheduler,
+            optimizer=self.optimizer,
+            default_num_warmup_steps=warm_up_steps,
+            default_num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
+            // cfg.training.gradient_accumulate_every,
+            # pytorch assumes stepping LRScheduler every epoch
+            # however huggingface diffusers steps it every batch
+            last_epoch=self.global_step - 1,
+            step_per_epoch=len(train_dataloader),
+            params_groups = cfg.get("param_groups", None)
+        )
+        #self.lr_scheduler = get_scheduler(
+        #    cfg.training.lr_scheduler,
+        #    optimizer=self.optimizer,
+        #    default_num_warmup_steps=warm_up_steps,
+        #    default_num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
+        #    // cfg.training.gradient_accumulate_every,
+        #    # pytorch assumes stepping LRScheduler every epoch
+        #    # however huggingface diffusers steps it every batch
+        #    last_epoch=self.global_step - 1,
+        #)
         lr_scheduler = self.lr_scheduler
         # resume training
         if cfg.training.resume:
@@ -234,8 +248,11 @@ class RobotWorkspace(BaseWorkspace):
                     "train_loss": raw_loss_cpu,
                     "global_step": self.global_step,
                     "epoch": self.epoch,
-                    "lr": lr_scheduler.get_last_lr()[0],
+                    #"lr": lr_scheduler.get_last_lr()[0],
                 }
+                all_lrs = lr_scheduler.get_last_lr()
+                for pg, lr in zip(self.optimizer.param_groups, all_lrs):
+                    step_log[f"{pg.get('name', 'default')}"] = lr
 
                 is_last_batch = batch_idx == (len(train_dataloader) - 1)
                 if not is_last_batch:
@@ -324,7 +341,7 @@ class RobotWorkspace(BaseWorkspace):
                     del mse
 
             # checkpoint
-            if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0:
+            if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0 or self.epoch + 1 == cfg.training.num_epochs:
                 # checkpointing
                 save_name = pathlib.Path(self.cfg.task.dataset.zarr_path).stem
                 self.save_checkpoint(

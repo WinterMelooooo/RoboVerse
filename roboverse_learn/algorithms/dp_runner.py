@@ -20,6 +20,19 @@ except:
     pass
 
 
+def print_dict_keys(d: dict, prefix: str = ""):
+    """
+    递归打印字典 d 中的所有键。如果 prefix 不为空，将其作为当前键的前缀（用 '.' 分隔）。
+    """
+    for k, v in d.items():
+        # 构造输出的“全路径”键名
+        path = f"{prefix}.{k}" if prefix else k
+        print(path)
+        # 如果值还是字典，就进一步递归
+        if isinstance(v, dict):
+            print_dict_keys(v, path)
+
+
 class DPRunner(PolicyRunner):
     """Runner for a diffusion policy, loads in a workspace and policy from checkpoint, and overrides some of the
     PolicyCFG attributes to match how the policy was trained
@@ -32,7 +45,14 @@ class DPRunner(PolicyRunner):
         cls = hydra.utils.get_class(cfg._target_)
         workspace: RobotWorkspace = cls(cfg, output_dir=kwargs.get("output_dir", None))
         workspace.load_payload(payload, exclude_keys=["lr_scheduler"], include_keys=None)
+        print(f"payload.keys: {list(payload.keys())}")
+        print(f"state_dict.keys: {list(payload['state_dicts'].keys())}")
+        # 假设 payload 是你从磁盘加载的 checkpoint dict
+        model_state = payload["state_dicts"]["model"]
 
+        # 打印 model_state 中所有（嵌套）键
+        print_dict_keys(model_state)
+        raise NotImplementedError()
         # get policy from workspace
         policy = workspace.model
         if cfg.training.use_ema:

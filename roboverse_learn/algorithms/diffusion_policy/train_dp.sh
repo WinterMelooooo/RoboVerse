@@ -22,11 +22,12 @@ max_visible_ratio=${13:-100} # 0.5 for 50% visible, 1 for 100% visible
 multigpu_lr_policy=${14:-"sqrt"}
 seed=${15:-42}
 norm_pnt_cloud=${16:-1}
-horizon=${17:-8} # 8 for 8 steps, 16 for 16 steps
-n_obs_steps=${18:-3} # 3 for 3 steps, 2 for 2 steps
-n_action_steps=${19:-4} # 4 for 4 steps, 8 for 8 steps
-tag="${20:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${21:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+multi_gpu_steps=${17:-1} # 1 for true, 0 for false
+horizon=${18:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${19:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${20:-4} # 4 for 4 steps, 8 for 8 steps
+tag="${21:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${22:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
 
 # adding the obs and action space as additional info

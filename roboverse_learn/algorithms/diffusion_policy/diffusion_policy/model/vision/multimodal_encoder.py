@@ -5,6 +5,7 @@ import inspect
 import torch
 import torch.nn as nn
 import torchvision
+import torch.nn.functional as F
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
@@ -86,6 +87,18 @@ class MultiModalEncoder(ModuleAttrMixin):
                                 num_channels=x.num_features,
                             ),
                         )
+                    if img_encoder_args.pretrained is not None:
+                        cprint(f"Loading pretrained weights for {key} from {img_encoder_args.pretrained}", "cyan")
+                        ckpt = torch.load(img_encoder_args.pretrained, map_location="cpu")
+                        full_sd = ckpt["state_dicts"]["model"]
+                        prefix = "obs_encoder.key_model_map.head_cam"
+                        sub_sd = {
+                            k[len(prefix) + 1:]: v
+                            for k, v in full_sd.items()
+                            if k.startswith(prefix + ".")
+                        }
+                        this_model.load_state_dict(sub_sd, strict=True)
+
                     key_model_map[key] = this_model
                 key_transform_map[key] = self._impl_img_transform(shape, type, key, img_encoder_args)
             elif type == "low_dim":
@@ -114,6 +127,8 @@ class MultiModalEncoder(ModuleAttrMixin):
         self.key_shape_map = key_shape_map
         self.fusion_func = self._get_fusion_func(fusion_args)
         self.fusion_args = fusion_args
+        self.dropout = fusion_args.get("dropout", 0.0)
+        self.dropout_model = nn.Dropout(p=self.dropout)
         try:
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
         except Exception as e:
@@ -182,9 +197,17 @@ class MultiModalEncoder(ModuleAttrMixin):
                 extra = pnt_cloud[..., 3:]  # assuming the extra features are in the last dimensions
             # print(f"{key}: {features[-1].device}")
 
+        # Dropout
+        if torch.rand([]) < self.dropout:
+            if torch.rand([]) < 0.5:
+                img_features = [f * 0.0 for f in img_features]
+            else:
+                pntcloud_features = [f * 0.0 for f in pntcloud_features]
+
         # concatenate all features
-        result = self.fusion_func(img_features=img_features, low_dim_features=low_dim_features, pntcloud_features=pntcloud_features, extra=extra)
-        return result
+        fused = self.fusion_func(img_features=img_features, low_dim_features=low_dim_features, pntcloud_features=pntcloud_features, extra=extra)
+        fused = self.dropout_model(fused)
+        return fused
 
     @torch.no_grad()
     def output_shape(self):
@@ -205,7 +228,6 @@ class MultiModalEncoder(ModuleAttrMixin):
             self.train()
         output_shape = example_output.shape[1:]
         return output_shape
-
 
     def _impl_img_transform(self, shape, type, key, args):
         # configure resize
@@ -256,7 +278,6 @@ class MultiModalEncoder(ModuleAttrMixin):
             this_resizer, this_randomizer, this_normalizer
         )
         return this_transform
-
 
     def _get_fusion_func(self, fusion_args):
         fusion_method = fusion_args.fusion_method
@@ -336,7 +357,6 @@ class MultiModalEncoder(ModuleAttrMixin):
                 raise ValueError(f"Unknown post_fusion_func: {post_fusion_func}")
             return self._cross_attention_features
 
-
     def _cross_attention_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
         img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
         pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
@@ -362,7 +382,6 @@ class MultiModalEncoder(ModuleAttrMixin):
             else:
                 raise ValueError(f"Unknown post_fusion_func: {self.post_fusion_func}")
         return fused
-
 
     def _get_algin_and_fusion_func(self, fusion_func, fusion_params, post_fusion_func, post_fusion_params, final_proj_func, final_proj_params):
         if fusion_func == "cat":

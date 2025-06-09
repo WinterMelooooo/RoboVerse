@@ -1,8 +1,8 @@
 defaults:
   - _self_
-  - task: default_task
+  - task: default_task_resnet_pointnet_mutual_attention
 
-encoder_name: RGB_ResNet18
+encoder_name: Fusion_ResNet18_PointNet_Mutual_Attention
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -33,7 +33,7 @@ policy_runner:
       rotation_rep: "quaternion"
       gripper_rep: "q_pos"
 policy:
-  _target_: diffusion_policy.policy.diffusion_unet_image_policy.DiffusionUnetImagePolicy
+  _target_: diffusion_policy.policy.multimodal_policy.MultiModalPolicy
 
   shape_meta: ${shape_meta}
 
@@ -48,21 +48,44 @@ policy:
     prediction_type: epsilon # or sample
 
   obs_encoder:
-    _target_: diffusion_policy.model.vision.multi_image_obs_encoder.MultiImageObsEncoder
+    _target_: diffusion_policy.model.vision.multimodal_encoder.MultiModalEncoder
     shape_meta: ${shape_meta}
-    rgb_model:
+    img_model:
       _target_: diffusion_policy.model.vision.model_getter.get_resnet
       name: resnet18
       weights: null
-    resize_shape: null
-    crop_shape: null
-    # constant center crop
-    random_crop: True
-    use_group_norm: True
-    share_rgb_model: False
-    imagenet_norm: True
-    test_rescale: False
-    name: ${task.name}
+    pntcloud_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_pointnet
+      in_channels: 3
+      out_channels: 128
+      use_layernorm: true
+      final_norm: layernorm # layernorm, none
+      normal_channel: false
+    robot_state_model:
+      _target_: diffusion_policy.model.vision.model_getter.get_state_mlp
+      observation_space: ${shape_meta.obs}
+      #_target_: diffusion_policy.model.vision.model_getter.get_identity
+
+    img_encoder_args:
+      resize_shape: null
+      crop_shape: null
+      random_crop: True
+      use_group_norm: True
+      imagenet_norm: True
+
+    fusion_args:
+      fusion_method: cross_attention
+      embed_dim: 256
+      num_heads: 8
+      img_dim: 512
+      pc_dim: 128
+      state_dim: 64
+      mutual_attention: True
+      post_fusion_func: sum
+      norm_proj: False
+      use_residual: True
+      dropout: 0.1
+
 
   horizon: ${horizon}
   n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
@@ -89,14 +112,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 32
+  batch_size: 128
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 32
+  batch_size: 128
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -104,7 +127,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1.0e-4
+  lr: 5.0e-5
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
@@ -118,7 +141,7 @@ training:
   output_dir: ""
   # optimization
   lr_scheduler: cosine
-  lr_warmup_steps: 500
+  lr_warmup_steps: 5000
   num_epochs: 1000
   gradient_accumulate_every: 1
   # EMA destroys performance when used with BatchNorm
@@ -128,7 +151,7 @@ training:
   # training loop control
   # in epochs
   rollout_every: 50
-  checkpoint_every: 100
+  checkpoint_every: 1000
   val_every: 5
   sample_every: 5
   # steps per epoch

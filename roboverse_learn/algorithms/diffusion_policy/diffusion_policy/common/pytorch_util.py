@@ -80,3 +80,40 @@ def optimizer_to(optimizer, device):
             if isinstance(v, torch.Tensor):
                 state[k] = v.to(device=device)
     return optimizer
+
+
+def update_optimizer(optimizer, model, param_groups: List[Dict], debug=False):
+    if param_groups is None or len(param_groups) == 0:
+        return optimizer
+    for module in param_groups:
+        prefix = module["name"]
+        special_params = [p for n,p in model.named_parameters() if (n == prefix or n.startswith(prefix + "."))]
+        assert len(special_params) > 0, f"no parameters found for prefix {prefix}"
+        default_group = optimizer.param_groups[0]
+        filtered = []
+        for p in default_group["params"]:
+            if not any(p is sp for sp in special_params):
+                filtered.append(p)
+        default_group["params"] = filtered
+        lr, weight_decay = module["lr"], module["weight_decay"]
+        optimizer.add_param_group({
+            "params": special_params,
+            "lr": lr,
+            "weight_decay": weight_decay,
+            "name": prefix
+        })
+
+    default_group = optimizer.param_groups[0]
+    default_group["name"] = "default"
+    if debug:
+        dump_path = "./tmp/debug/optimizer_params.txt"
+        param_to_name = {p: n for n, p in model.named_parameters()}
+        with open(dump_path, "w") as f:
+            for pg in optimizer.param_groups:
+                f.write(f"Group `{pg['name']}`:\n")
+                for p in pg["params"]:
+                    name = param_to_name.get(p, "<unknown>")
+                    f.write(f"  {name}\n")
+                f.write("\n")
+
+    return optimizer
