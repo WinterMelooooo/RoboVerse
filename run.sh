@@ -1,8 +1,8 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=CloseBox
 level=2
-config_name=robot_dp
-num_epochs=200
+config_name=robot_dp_resnet_pointnet_mutual_attention_dropout
+num_epochs=2000
 port=50036
 norm_pnt_cloud=0
 seed=42

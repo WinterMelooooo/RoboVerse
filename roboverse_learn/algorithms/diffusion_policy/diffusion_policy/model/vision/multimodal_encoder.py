@@ -87,7 +87,7 @@ class MultiModalEncoder(ModuleAttrMixin):
                                 num_channels=x.num_features,
                             ),
                         )
-                    if img_encoder_args.pretrained is not None:
+                    if img_encoder_args.get("pretrained", None):
                         cprint(f"Loading pretrained weights for {key} from {img_encoder_args.pretrained}", "cyan")
                         ckpt = torch.load(img_encoder_args.pretrained, map_location="cpu")
                         full_sd = ckpt["state_dicts"]["model"]
