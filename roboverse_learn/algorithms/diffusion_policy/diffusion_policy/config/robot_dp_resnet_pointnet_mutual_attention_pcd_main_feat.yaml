@@ -127,7 +127,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 5.0e-5
+  lr: 1.0e-4
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
@@ -141,7 +141,7 @@ training:
   output_dir: ""
   # optimization
   lr_scheduler: cosine
-  lr_warmup_steps: 5000
+  lr_warmup_steps: 500
   num_epochs: 1000
   gradient_accumulate_every: 1
   # EMA destroys performance when used with BatchNorm
