@@ -252,7 +252,7 @@ class RobotWorkspace(BaseWorkspace):
                 }
                 all_lrs = lr_scheduler.get_last_lr()
                 for pg, lr in zip(self.optimizer.param_groups, all_lrs):
-                    step_log[f"{pg.get('name', 'default')}"] = lr
+                    step_log[f"lr_{pg.get('name', 'default')}"] = lr
 
                 is_last_batch = batch_idx == (len(train_dataloader) - 1)
                 if not is_last_batch:

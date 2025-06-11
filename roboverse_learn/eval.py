@@ -83,7 +83,7 @@ class Args:
 
 args = tyro.cli(Args)
 
-
+DEBUG = False
 def main():
     num_envs: int = args.num_envs
     log.info(f"Using GPU device: {args.gpu_id}")
@@ -161,20 +161,22 @@ def main():
     num_demos = len(init_states)
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
-
-    #from roboverse_learn.algorithms.utils.random_state import compute_stats, plot_state_distributions_grid
-    #stats_dict = compute_stats(init_states)
-    #import pprint
-    #pprint.pprint(stats_dict)
-    #plot_state_distributions_grid(init_states, save_path=f"tmp/tmp_StackCube", bins=50, cols=8)
-    #raise ValueError()
+    if DEBUG:
+        for state in init_states:
+            print(state)
+        from roboverse_learn.algorithms.utils.random_state import compute_stats, plot_state_distributions_grid
+        stats_dict = compute_stats(init_states)
+        import pprint
+        pprint.pprint(stats_dict)
+        plot_state_distributions_grid(init_states, save_path=f"tmp/tmp_StackCube", bins=50, cols=8)
+        #raise ValueError()
 
     if args.task_id_range_high > num_demos:
         log.info(f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!")
         from roboverse_learn.algorithms.utils.random_state import state_stats, generate_random_states
         delta = args.task_id_range_high - num_demos
         stat_dict = state_stats[args.task] # min, max, mean, std
-        new_states = generate_random_states(stat_dict, delta)
+        new_states = generate_random_states(stat_dict, delta, args.task)
         init_states = init_states + new_states
         log.info(f"Generated {delta} random states for OOD testing, total demos: {len(init_states)}")
         num_demos = len(init_states)
@@ -191,6 +193,20 @@ def main():
         ## Reset before first step
         tic = time.time()
         obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])
+        if DEBUG:
+            save_dir = os.path.join("tmp/imgs", args.task)
+            for i in range(num_envs):
+                # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
+                img = np.array(obs.cameras["camera0"].rgb[i].cpu())
+                # 为每个 demo 创建子目录
+                demo_idx = demo_start_idx + i
+                demo_dir = save_dir
+                os.makedirs(demo_dir, exist_ok=True)
+                # 保存为 PNG
+                file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}.png")
+                iio.imwrite(file_path, img)
+            raise NotImplementedError()
+
         policyRunner.reset()
         toc = time.time()
         log.trace(f"Time to reset: {toc - tic:.2f}s")
@@ -254,12 +270,13 @@ def main():
                 f.write(f"SuccessEnd: {SuccessEnd[i]}\n")
                 f.write(f"TimeOut: {TimeOut[i]}\n")
                 f.write(f"Cumulative Average Success Rate: {total_success / total_completed}\n")
+                f.write(f"Evaling checkpoint: {args.checkpoint_path}")
         log.info("Demo Indices: ", range(demo_start_idx, demo_end_idx))
         log.info("Num Envs: ", num_envs)
         log.info(f"SuccessOnce: {SuccessOnce}")
         log.info(f"SuccessEnd: {SuccessEnd}")
         log.info(f"TimeOut: {TimeOut}")
-        log.info(f"Finished evaling checkpoint: {args.checkpoint_path.split('/')[-3]}")
+        log.info(f"Finished evaling checkpoint: {'/'.join(args.checkpoint_path.split('/')[-4:-2])}")
         log.info(f"Results saved to tmp/{ckpt_name}")
     log.info(f"FINAL RESULTS: {total_success / total_completed}")
     with open(f"tmp/{ckpt_name}/final_stats.txt", "w") as f:

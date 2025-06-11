@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
+from roboverse_learn.algorithms.utils.channelwise_dropout import ChannelWiseDropout
 from termcolor import cprint
 
 class ImgEncoderArgs():
@@ -128,7 +129,8 @@ class MultiModalEncoder(ModuleAttrMixin):
         self.fusion_func = self._get_fusion_func(fusion_args)
         self.fusion_args = fusion_args
         self.dropout = fusion_args.get("dropout", 0.0)
-        self.dropout_model = nn.Dropout(p=self.dropout)
+        self.dropout_model = nn.Dropout(p=self.dropout) if not fusion_args.get("use_channel_wise_dropout", False) else ChannelWiseDropout(p=self.dropout)
+        cprint(f"[MultiModal Encoder]channel wise dropout: {fusion_args.get('use_channel_wise_dropout', False)}", "cyan")
         try:
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
         except Exception as e:
@@ -361,8 +363,14 @@ class MultiModalEncoder(ModuleAttrMixin):
         img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
         pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
         low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [N3, B, embed_dim]
-        main_feat = torch.stack(img_feats, dim=0) # [N1, B, embed_dim]
-        key_feats = low_dim_feats + pc_feats # [N2+N3, B, embed_dim]
+        if self.fusion_args.get("main_feat", "img") == "img":
+            main_feat = torch.stack(img_feats, dim=0) # [N1, B, embed_dim]
+            key_feats = low_dim_feats + pc_feats # [N2+N3, B, embed_dim]
+        elif self.fusion_args.get("main_feat", "img") == "pcd":
+            main_feat = torch.stack(pc_feats, dim=0)
+            key_feats = img_feats + low_dim_feats # [N1+N3, B, embed_dim]
+        else:
+            raise ValueError(f"Unknown main_feat: {self.fusion_args.get('main_feat', 'img')}")
         key_feats = torch.stack(key_feats, dim=0) # [N2+N3, B, embed_dim]
         attn_output, _ = self.cross_attn(main_feat, key_feats, key_feats)
         if self.use_residual:
