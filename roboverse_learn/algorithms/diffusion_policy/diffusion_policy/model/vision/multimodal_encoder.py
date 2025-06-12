@@ -416,6 +416,56 @@ class MultiModalEncoder(ModuleAttrMixin):
                 raise ValueError(f"Unknown post_fusion_func: {self.post_fusion_func}")
         return fused
 
+
+    def _get_joint_attention_func(self,
+                             embed_dim: int,
+                             num_heads: int,
+                             img_dim: int,
+                             pc_dim: int,
+                             state_dim: int,
+                             pooling_func: str = "mean",
+                             use_residual: bool = False,
+                             use_modality_encoding: bool = False):
+            self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads)
+            self.use_modality_encoding = use_modality_encoding
+            self.pooling_func = pooling_func
+            self.use_residual = use_residual
+            cprint(f"[Cross Attention]: use residual: {use_residual}", "cyan")
+            cprint(f"[Cross Attention]: use_modality_encoding: {use_modality_encoding}", "cyan")
+            cprint(f"[Cross Attention]: pooling_func: {pooling_func}", "cyan")
+            if use_modality_encoding:
+                self.modality_embed = nn.Embedding(3, embed_dim)  # 3 modalities: img, pc, state
+            self.img_proj = nn.Sequential(nn.Linear(img_dim, embed_dim), self.img_norm_layer)
+            self.pc_proj = nn.Sequential(nn.Linear(pc_dim, embed_dim), self.pc_norm_layer)
+            self.state_proj = nn.Sequential(nn.Linear(state_dim, embed_dim), self.state_norm_layer)
+
+            return self._joint_attention_features
+
+    def _joint_attention_features(self, img_features, low_dim_features, pntcloud_features, extra=None):
+        img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
+        pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
+        low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [N3, B, embed_dim]
+        if self.use_modality_encoding:
+            device = img_feats[0].device
+            e_img  = self.modality_embed(torch.tensor(0, device=device, dtype=torch.long))  # (embed_dim,)
+            e_pc   = self.modality_embed(torch.tensor(1, device=device, dtype=torch.long))
+            e_state= self.modality_embed(torch.tensor(2, device=device, dtype=torch.long))
+            img_feats = [f + e_img for f in img_feats]
+            pc_feats = [f + e_pc for f in pc_feats]
+            low_dim_feats = [f + e_state for f in low_dim_feats]
+        feats = img_feats + pc_feats + low_dim_feats
+        feats = torch.stack(feats, dim=0) # [N1+N2+N3, B, embed_dim]
+        attn_output, _ = self.cross_attn(feats, feats, feats)
+        if self.use_residual:
+            attn_output = attn_output + feats
+        if self.pooling_func == "mean":
+            fused = attn_output.mean(dim=0)
+        else:
+            raise ValueError(f"Unknown pooling function: {self.pooling_func}")
+
+        return fused
+
+
     def _get_algin_and_fusion_func(self, fusion_func, fusion_params, post_fusion_func, post_fusion_params, final_proj_func, final_proj_params):
         if fusion_func == "cat":
             self.post_align_fusion_func = lambda x,y: torch.cat([x, y], dim=-1)

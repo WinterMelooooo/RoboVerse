@@ -1,8 +1,8 @@
-pndefaults:
+defaults:
   - _self_
   - task: default_task_resnet_pointnet_mutual_attention
 
-encoder_name: Fusion_ResNet18_PointNet_Mutual_Attention_Independent_Attention
+encoder_name: Fusion_ResNet18_PointNet_Mutual_Attention
 
 name: robot_${task.name}
 _target_: diffusion_policy.workspace.robotworkspace.RobotWorkspace
@@ -74,17 +74,16 @@ policy:
       imagenet_norm: True
 
     fusion_args:
-      fusion_method: cross_attention
+      fusion_method: joint_attention
       embed_dim: 256
       num_heads: 8
       img_dim: 512
       pc_dim: 128
       state_dim: 64
       mutual_attention: True
-      post_fusion_func: sum
-      norm_proj: False
+      pooling_func: mean
       use_residual: True
-      use_independent_attention: True
+      use_modality_encoding: True
 
 
   horizon: ${horizon}
