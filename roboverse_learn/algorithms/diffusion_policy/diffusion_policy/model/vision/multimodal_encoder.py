@@ -304,7 +304,10 @@ class MultiModalEncoder(ModuleAttrMixin):
             kwargs = {k: fusion_args[k] for k in all_params if k in fusion_args}
             return self._get_algin_and_fusion_func(**kwargs)
         elif fusion_method == "joint_attention":
-            raise NotImplementedError("Triple attention fusion method is not implemented yet.")
+            sig = inspect.signature(self._get_joint_attention_func)
+            all_params = list(sig.parameters.keys())   # ['self', 'embed_dim', 'num_heads', ...]
+            kwargs = {k: fusion_args[k] for k in all_params if k in fusion_args}
+            return self._get_joint_attention_func(**kwargs)
         elif fusion_method == "perceiver":
             raise NotImplementedError("Perceiver fusion method is not implemented yet.")
         else:
@@ -430,14 +433,14 @@ class MultiModalEncoder(ModuleAttrMixin):
             self.use_modality_encoding = use_modality_encoding
             self.pooling_func = pooling_func
             self.use_residual = use_residual
-            cprint(f"[Cross Attention]: use residual: {use_residual}", "cyan")
-            cprint(f"[Cross Attention]: use_modality_encoding: {use_modality_encoding}", "cyan")
-            cprint(f"[Cross Attention]: pooling_func: {pooling_func}", "cyan")
+            cprint(f"[Joint Attention]: use residual: {use_residual}", "cyan")
+            cprint(f"[Joint Attention]: use_modality_encoding: {use_modality_encoding}", "cyan")
+            cprint(f"[Joint Attention]: pooling_func: {pooling_func}", "cyan")
             if use_modality_encoding:
                 self.modality_embed = nn.Embedding(3, embed_dim)  # 3 modalities: img, pc, state
-            self.img_proj = nn.Sequential(nn.Linear(img_dim, embed_dim), self.img_norm_layer)
-            self.pc_proj = nn.Sequential(nn.Linear(pc_dim, embed_dim), self.pc_norm_layer)
-            self.state_proj = nn.Sequential(nn.Linear(state_dim, embed_dim), self.state_norm_layer)
+            self.img_proj = nn.Sequential(nn.Linear(img_dim, embed_dim))
+            self.pc_proj = nn.Sequential(nn.Linear(pc_dim, embed_dim))
+            self.state_proj = nn.Sequential(nn.Linear(state_dim, embed_dim))
 
             return self._joint_attention_features
 
