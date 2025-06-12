@@ -71,4 +71,4 @@ training.tag=${tag} \
 ++task.dataset.max_visible_ratio=${max_visible_ratio} \
 ++optimizer.multigpu_lr_policy=${multigpu_lr_policy} \
 ++task.dataset.norm_pnt_cloud=${norm_pnt_cloud} \
-++task.dataset.logger_name=${logger} \
+++logging.logger_name=${logger} \
