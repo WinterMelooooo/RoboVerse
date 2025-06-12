@@ -130,7 +130,7 @@ class MultiModalEncoder(ModuleAttrMixin):
         self.fusion_args = fusion_args
         self.dropout = fusion_args.get("dropout", 0.0)
         self.dropout_model = nn.Dropout(p=self.dropout) if not fusion_args.get("use_channel_wise_dropout", False) else ChannelWiseDropout(p=self.dropout)
-        cprint(f"[MultiModal Encoder]channel wise dropout: {fusion_args.get('use_channel_wise_dropout', False)}", "cyan")
+        cprint(f"[MultiModal Encoder]: channel wise dropout: {fusion_args.get('use_channel_wise_dropout', False)}", "cyan")
         try:
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
         except Exception as e:
@@ -200,8 +200,8 @@ class MultiModalEncoder(ModuleAttrMixin):
             # print(f"{key}: {features[-1].device}")
 
         # Dropout
-        if torch.rand([]) < self.dropout:
-            if torch.rand([]) < 0.5:
+        if torch.rand((), device=device) < self.dropout:
+            if torch.rand((), device=device) < 0.5:
                 img_features = [f * 0.0 for f in img_features]
             else:
                 pntcloud_features = [f * 0.0 for f in pntcloud_features]
@@ -303,6 +303,8 @@ class MultiModalEncoder(ModuleAttrMixin):
             all_params = list(sig.parameters.keys())   # ['self', 'embed_dim', 'num_heads', ...]
             kwargs = {k: fusion_args[k] for k in all_params if k in fusion_args}
             return self._get_algin_and_fusion_func(**kwargs)
+        elif fusion_method == "joint_attention":
+            raise NotImplementedError("Triple attention fusion method is not implemented yet.")
         elif fusion_method == "perceiver":
             raise NotImplementedError("Perceiver fusion method is not implemented yet.")
         else:
@@ -316,12 +318,23 @@ class MultiModalEncoder(ModuleAttrMixin):
                              mutual_attention: bool = True,
                              post_fusion_func: str = "sum",
                              norm_proj: bool = False,
-                             use_residual: bool = False,):
+                             use_residual: bool = False,
+                             use_independent_attention: bool = False,
+                             use_modality_encoding: bool = False):
             self.cross_attn = nn.MultiheadAttention(embed_dim, num_heads)
+            self.use_independent_attenion = use_independent_attention
+            self.use_modality_encoding = use_modality_encoding
+            if use_independent_attention:
+                self.cross_attn_key = nn.MultiheadAttention(embed_dim, num_heads)
+            if use_modality_encoding:
+                self.modality_embed = nn.Embedding(3, embed_dim)  # 3 modalities: img, pc, state
+
             self.use_residual = use_residual
             cprint(f"[Cross Attention]: use residual: {use_residual}", "cyan")
             cprint(f"[Cross Attention]: mutual_attention: {mutual_attention}", "cyan")
             cprint(f"[Cross Attention]: post_fusion_func: {post_fusion_func}", "cyan")
+            cprint(f"[Cross Attention]: use_independent_attention: {use_independent_attention}", "cyan")
+            cprint(f"[Cross Attention]: use_modality_encoding: {use_modality_encoding}", "cyan")
             if norm_proj:
                 num_groups = embed_dim // 16 if embed_dim % 16 == 0 else embed_dim // 8
                 self.img_norm_layer = nn.GroupNorm(
@@ -363,6 +376,14 @@ class MultiModalEncoder(ModuleAttrMixin):
         img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
         pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
         low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [N3, B, embed_dim]
+        if self.use_modality_encoding:
+            device = img_feats[0].device
+            e_img  = self.modality_embed(torch.tensor(0, device=device, dtype=torch.long))  # (embed_dim,)
+            e_pc   = self.modality_embed(torch.tensor(1, device=device, dtype=torch.long))
+            e_state= self.modality_embed(torch.tensor(2, device=device, dtype=torch.long))
+            img_feats = [f + e_img for f in img_feats]
+            pc_feats = [f + e_pc for f in pc_feats]
+            low_dim_feats = [f + e_state for f in low_dim_feats]
         if self.fusion_args.get("main_feat", "img") == "img":
             main_feat = torch.stack(img_feats, dim=0) # [N1, B, embed_dim]
             key_feats = low_dim_feats + pc_feats # [N2+N3, B, embed_dim]
@@ -377,7 +398,11 @@ class MultiModalEncoder(ModuleAttrMixin):
             attn_output = attn_output + main_feat
         fused = attn_output.mean(dim=0)
         if self.mutual_attention:
-            attn_output, attn_map = self.cross_attn(key_feats, main_feat, main_feat)
+            if self.use_independent_attenion:
+                attn_output, attn_map = self.cross_attn_key(key_feats, main_feat, main_feat)
+            else:
+                attn_output, attn_map = self.cross_attn(key_feats, main_feat, main_feat)
+
             if self.use_residual:
                 attn_output = attn_output + key_feats
             if self.post_fusion_func == "sum":
