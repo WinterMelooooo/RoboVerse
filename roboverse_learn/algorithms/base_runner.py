@@ -2,16 +2,18 @@ from metasim.cfg.policy.base_policy import BasePolicyCfg
 
 try:
     from curobo.types.math import Pose
-    from pytorch3d import transforms
-
     from metasim.utils.kinematics_utils import get_curobo_models
+    from pytorch3d import transforms
 except ImportError:
     pass
 
 import torch
-from diffusion_policy.common.pytorch_util import dict_apply
-from loguru import logger as log
 
+try:
+    from diffusion_policy.common.pytorch_util import dict_apply
+except ImportError:
+    pass
+from loguru import logger as log
 from metasim.cfg.scenario import ScenarioCfg
 
 
@@ -48,7 +50,8 @@ class PolicyRunner:
                 [
                     self.num_envs,
                     self.scenario.episode_length,
-                    self.scenario.episode_length + self.policy_cfg.action_config.action_chunk_steps,
+                    self.scenario.episode_length
+                    + self.policy_cfg.action_config.action_chunk_steps,
                     self.policy_cfg.action_config.action_dim,
                 ],
                 device=self.device,
@@ -59,7 +62,10 @@ class PolicyRunner:
         """
         Processes the observation to be used by the policy, according to the observation the policy is configured to use.
         """
-        obs = dict_apply(obs, lambda x: x.to(device=self.device) if isinstance(x, torch.Tensor) else x)
+        obs = dict_apply(
+            obs,
+            lambda x: x.to(device=self.device) if isinstance(x, torch.Tensor) else x,
+        )
         obs_dict = {}
 
         if self.policy_cfg.obs_config.norm_image:
@@ -76,7 +82,9 @@ class PolicyRunner:
             curr_ee_pos_local = transforms.quaternion_apply(
                 transforms.quaternion_invert(robot_quat), curr_ee_pos - robot_pos
             )
-            curr_ee_quat_local = transforms.quaternion_multiply(transforms.quaternion_invert(robot_quat), curr_ee_quat)
+            curr_ee_quat_local = transforms.quaternion_multiply(
+                transforms.quaternion_invert(robot_quat), curr_ee_quat
+            )
 
             if self.policy_cfg.obs_config.ee_cfg.gripper_rep == "q_pos":
                 gripper_state = obs["joint_qpos"][:, -2:]
@@ -87,23 +95,35 @@ class PolicyRunner:
                 curr_ee_rot_local = curr_ee_quat_local
             else:
                 curr_ee_rot_local = transforms.matrix_to_euler_angles(
-                    transforms.quaternion_to_matrix(curr_ee_quat_local), convention="XYZ"
+                    transforms.quaternion_to_matrix(curr_ee_quat_local),
+                    convention="XYZ",
                 )
 
-            obs_dict["agent_pos"] = torch.cat([curr_ee_pos_local, curr_ee_rot_local, gripper_state], dim=1)
+            obs_dict["agent_pos"] = torch.cat(
+                [curr_ee_pos_local, curr_ee_rot_local, gripper_state], dim=1
+            )
 
         if self.policy_cfg.obs_config.obs_padding > 0:
-            padding_len = self.policy_cfg.obs_config.obs_padding - obs_dict["agent_pos"].shape[1]
+            padding_len = (
+                self.policy_cfg.obs_config.obs_padding - obs_dict["agent_pos"].shape[1]
+            )
             padding = torch.zeros(self.num_envs, padding_len, device=self.device)
             obs_dict["agent_pos"] = torch.cat([obs_dict["agent_pos"], padding], dim=1)
 
-        assert obs_dict["agent_pos"].shape == (self.num_envs, self.policy_cfg.obs_config.obs_dim)
+        assert obs_dict["agent_pos"].shape == (
+            self.num_envs,
+            self.policy_cfg.obs_config.obs_dim,
+        )
         # flush unused keys
         if "pcds" in self.policy_cfg.obs_config.obs_keys:
             self.policy_cfg.obs_config.obs_keys.append("point_cloud")
         if "qpos" in self.policy_cfg.obs_config.obs_keys:
             self.policy_cfg.obs_config.obs_keys.append("agent_pos")
-        obs_dict = {k: v for k, v in obs_dict.items() if k in self.policy_cfg.obs_config.obs_keys}
+        obs_dict = {
+            k: v
+            for k, v in obs_dict.items()
+            if k in self.policy_cfg.obs_config.obs_keys
+        }
 
         return obs_dict
 
@@ -115,7 +135,9 @@ class PolicyRunner:
             {
                 "dof_pos_target": {
                     joint_name: curr_action[i, index]
-                    for index, joint_name in enumerate(sorted(self.scenario.robot.joint_limits.keys()))
+                    for index, joint_name in enumerate(
+                        sorted(self.scenario.robot.joint_limits.keys())
+                    )
                 }
             }
             for i in range(self.num_envs)
@@ -134,21 +156,29 @@ class PolicyRunner:
 
         # Put envs dimension first
         self.all_time_actions[
-            :, self.step, self.step : self.step + self.policy_cfg.action_config.action_chunk_steps
+            :,
+            self.step,
+            self.step : self.step + self.policy_cfg.action_config.action_chunk_steps,
         ] = action_chunk.transpose(0, 1)
 
         actions_for_curr_step = self.all_time_actions[:, :, self.step]
 
-        actions_populated = torch.all(torch.all(actions_for_curr_step != 0, dim=2), dim=0)
+        actions_populated = torch.all(
+            torch.all(actions_for_curr_step != 0, dim=2), dim=0
+        )
         actions_for_curr_step = actions_for_curr_step[:, actions_populated]
 
         time_indices = torch.arange(
-            actions_for_curr_step.shape[1], device=actions_for_curr_step.device, dtype=torch.float
+            actions_for_curr_step.shape[1],
+            device=actions_for_curr_step.device,
+            dtype=torch.float,
         )
         exp_weights = torch.exp(self.k * time_indices)
         exp_weights = exp_weights / exp_weights.sum()
 
-        weighted_actions = actions_for_curr_step * exp_weights.unsqueeze(-1).unsqueeze(0)
+        weighted_actions = actions_for_curr_step * exp_weights.unsqueeze(-1).unsqueeze(
+            0
+        )
 
         raw_action = weighted_actions.sum(dim=1)
 
@@ -162,20 +192,27 @@ class PolicyRunner:
             curr_action = self.action_cache.pop(0)
         else:
             processed_obs = self.process_obs(obs)
-            action_chunk = self.predict_action(processed_obs)  # shape: (action_chunk_steps, num_envs, action_dim)
+            action_chunk = self.predict_action(
+                processed_obs
+            )  # shape: (action_chunk_steps, num_envs, action_dim)
             if self.policy_cfg.action_config.temporal_agg:
                 curr_action = self.get_temporal_agg_action(action_chunk)
                 curr_action = self.process_action([curr_action], obs)[0]
             else:
                 qpos_action = self.process_action(action_chunk, obs)
-                assert len(qpos_action) == self.policy_cfg.action_config.action_chunk_steps, (
+                assert (
+                    len(qpos_action) == self.policy_cfg.action_config.action_chunk_steps
+                ), (
                     f"Expected {self.policy_cfg.action_config.action_chunk_steps} actions, got {len(qpos_action)}"
                 )
                 self.action_cache = qpos_action
                 curr_action = self.action_cache.pop(0)
 
         self.step += 1
-        assert curr_action.shape == (self.num_envs, len(self.scenario.robot.joint_limits.keys())), (
+        assert curr_action.shape == (
+            self.num_envs,
+            len(self.scenario.robot.joint_limits.keys()),
+        ), (
             f"Expected num_envs X n_dof : {self.num_envs} X {len(self.scenario.robot.joint_limits.keys())}, got {curr_action.shape} instead"
         )
 
@@ -187,7 +224,10 @@ class PolicyRunner:
 
     def _solve_ik(self, action, curr_ee_pos_local, curr_ee_quat_local, curr_robot_q):
         """Solves IK for the given action end-effector action, in either delta or absolute control"""
-        assert action.shape == (self.num_envs, self.policy_cfg.action_config.action_dim), (
+        assert action.shape == (
+            self.num_envs,
+            self.policy_cfg.action_config.action_dim,
+        ), (
             f"Expected num_envs X action_dim : {self.num_envs} X {self.policy_cfg.action_config.action_dim}, got {action.shape} instead"
         )
         if self.policy_cfg.action_config.ee_cfg.rotation_rep == "quaternion":
@@ -195,29 +235,44 @@ class PolicyRunner:
             quat_norm = torch.norm(ee_quat_action, dim=1, keepdim=True)
             ee_quat_action = ee_quat_action / (quat_norm + 1e-5)
         else:
-            ee_quat_action = transforms.matrix_to_quaternion(transforms.euler_angles_to_matrix(action[:, 3:6], "XYZ"))
+            ee_quat_action = transforms.matrix_to_quaternion(
+                transforms.euler_angles_to_matrix(action[:, 3:6], "XYZ")
+            )
 
         if self.policy_cfg.action_config.delta:
             ee_pos_target = curr_ee_pos_local + action[:, :3]
-            ee_quat_target = transforms.quaternion_multiply(curr_ee_quat_local, ee_quat_action)
+            ee_quat_target = transforms.quaternion_multiply(
+                curr_ee_quat_local, ee_quat_action
+            )
         else:
             ee_pos_target = action[:, :3]
             ee_quat_target = ee_quat_action
 
         # Solve IK
-        seed_config = curr_robot_q[:, : self.curobo_n_dof].unsqueeze(1).tile([1, self.robot_ik._num_seeds, 1])
+        seed_config = (
+            curr_robot_q[:, : self.curobo_n_dof]
+            .unsqueeze(1)
+            .tile([1, self.robot_ik._num_seeds, 1])
+        )
         result = self.robot_ik.solve_batch(
-            Pose(ee_pos_target.cuda(0), ee_quat_target.cuda(0)), seed_config=seed_config.cuda(0)
+            Pose(ee_pos_target.cuda(0), ee_quat_target.cuda(0)),
+            seed_config=seed_config.cuda(0),
         )
 
         if self.policy_cfg.action_config.ee_cfg.gripper_rep == "strength":
             gripper_pos = 1 - action[:, -1]
-            gripper_widths = torch.zeros(self.num_envs, self.ee_n_dof, device=self.device)
+            gripper_widths = torch.zeros(
+                self.num_envs, self.ee_n_dof, device=self.device
+            )
             for i in range(self.num_envs):
                 if gripper_pos[i] < 0.5:
-                    gripper_widths[i] = torch.tensor(self.scenario.robot.gripper_actuate_q, device=self.device)
+                    gripper_widths[i] = torch.tensor(
+                        self.scenario.robot.gripper_actuate_q, device=self.device
+                    )
                 else:
-                    gripper_widths[i] = torch.tensor(self.scenario.robot.gripper_release_q, device=self.device)
+                    gripper_widths[i] = torch.tensor(
+                        self.scenario.robot.gripper_release_q, device=self.device
+                    )
         else:
             gripper_widths = action[:, -self.ee_n_dof :]
 
@@ -227,7 +282,9 @@ class PolicyRunner:
             log.warning(f"IK failed: {ik_succ}")
             log.info("Trying to POS delta: ", action[:, :3])
 
-        q[ik_succ, : self.curobo_n_dof] = result.solution.to(self.device)[ik_succ, 0].clone()
+        q[ik_succ, : self.curobo_n_dof] = result.solution.to(self.device)[
+            ik_succ, 0
+        ].clone()
         q[:, -self.ee_n_dof :] = gripper_widths
         return q
 
@@ -237,7 +294,10 @@ class PolicyRunner:
         """
         action_chunk = [a.to(self.device) for a in action_chunk]
         for a in action_chunk:
-            assert a.shape == (self.num_envs, self.policy_cfg.action_config.action_dim), (
+            assert a.shape == (
+                self.num_envs,
+                self.policy_cfg.action_config.action_dim,
+            ), (
                 f"Expected num_envs X action_dim : {self.num_envs} X {self.policy_cfg.action_config.action_dim}, got {a.shape} instead"
             )
         if self.policy_cfg.action_config.action_type == "joint_pos":
@@ -251,14 +311,20 @@ class PolicyRunner:
             curr_ee_pos_local = transforms.quaternion_apply(
                 transforms.quaternion_invert(robot_quat), curr_ee_pos - robot_pos
             )
-            curr_ee_quat_local = transforms.quaternion_multiply(transforms.quaternion_invert(robot_quat), curr_ee_quat)
+            curr_ee_quat_local = transforms.quaternion_multiply(
+                transforms.quaternion_invert(robot_quat), curr_ee_quat
+            )
             curr_robot_q = obs["joint_qpos"].to(self.device)
             for action in action_chunk:
-                target_qpos = self._solve_ik(action, curr_ee_pos_local, curr_ee_quat_local, curr_robot_q)
+                target_qpos = self._solve_ik(
+                    action, curr_ee_pos_local, curr_ee_quat_local, curr_robot_q
+                )
                 qpos_action_chunk.append(target_qpos)
 
         if self.policy_cfg.action_config.interpolate_chunk:
-            return self._interpolate_chunk(obs["joint_qpos"].to(self.device), qpos_action_chunk)
+            return self._interpolate_chunk(
+                obs["joint_qpos"].to(self.device), qpos_action_chunk
+            )
         else:
             return qpos_action_chunk
 
@@ -270,7 +336,10 @@ class PolicyRunner:
         )
 
         return [
-            curr_qpos + (last_action - curr_qpos) * (i + 1) / self.policy_cfg.action_config.action_chunk_steps
+            curr_qpos
+            + (last_action - curr_qpos)
+            * (i + 1)
+            / self.policy_cfg.action_config.action_chunk_steps
             for i in range(self.policy_cfg.action_config.action_chunk_steps)
         ]
 

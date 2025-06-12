@@ -1,13 +1,12 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export WANDB_MODE=offline
 task_name=StackCube
 level=0
 config_name=robot_dp_resnet_pointnet_joint_attention
 num_epochs=2000
-port=50051
+port=50058
 norm_pnt_cloud=0
 seed=42
-gpus=0,1,2,3,4,5,6,7
+gpus=0,1
 strategy=sqrt
 train_ratio=100
 logger=tensorboard

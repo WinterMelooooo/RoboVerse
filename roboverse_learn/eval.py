@@ -73,6 +73,8 @@ class Args:
     """GPU ID to use"""
     wrapper_class: str | None = None
     """Env wrapper to use"""
+    use_segmentation_mask: bool = False
+    """Use segmentation mask in the observations"""
 
     def __post_init__(self):
         if self.random.table and not self.table:
@@ -83,7 +85,11 @@ class Args:
 
 args = tyro.cli(Args)
 
-DEBUG = False
+DEBUG_RGB = False
+DEBUG_RAND_STATE = False
+DEBUG_PCD = True
+
+
 def main():
     num_envs: int = args.num_envs
     log.info(f"Using GPU device: {args.gpu_id}")
@@ -124,9 +130,13 @@ def main():
         subset=args.subset,
     )
     action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
-    if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+    if (
+        "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+        or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+    ):
         try:
-            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
+            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter, get_segmentation_id
+
         except:
             import sys
 
@@ -161,21 +171,26 @@ def main():
     num_demos = len(init_states)
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
-    if DEBUG:
+    if DEBUG_RAND_STATE:
         for state in init_states:
             print(state)
         from roboverse_learn.algorithms.utils.random_state import compute_stats, plot_state_distributions_grid
+
         stats_dict = compute_stats(init_states)
         import pprint
+
         pprint.pprint(stats_dict)
         plot_state_distributions_grid(init_states, save_path=f"tmp/tmp_StackCube", bins=50, cols=8)
-        #raise ValueError()
+        # raise ValueError()
 
     if args.task_id_range_high > num_demos:
-        log.info(f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!")
-        from roboverse_learn.algorithms.utils.random_state import state_stats, generate_random_states
+        log.info(
+            f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!"
+        )
+        from roboverse_learn.algorithms.utils.random_state import generate_random_states, state_stats
+
         delta = args.task_id_range_high - num_demos
-        stat_dict = state_stats[args.task] # min, max, mean, std
+        stat_dict = state_stats[args.task]  # min, max, mean, std
         new_states = generate_random_states(stat_dict, delta, args.task)
         init_states = init_states + new_states
         log.info(f"Generated {delta} random states for OOD testing, total demos: {len(init_states)}")
@@ -193,7 +208,7 @@ def main():
         ## Reset before first step
         tic = time.time()
         obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])
-        if DEBUG:
+        if DEBUG_RGB:
             save_dir = os.path.join("tmp/imgs", args.task)
             for i in range(num_envs):
                 # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
@@ -229,17 +244,36 @@ def main():
             ):
                 new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
-            if "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+            if (
+                "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+                or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+            ):
                 depth = obs.cameras["camera0"].depth
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics
-                pnt_cloud = pnt_cloud_getter.get_point_cloud(new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu())
+                segmentation_mask = None
+                segmentation_id = None
+                if args.use_segmentation_mask:
+                    segmentation_mask = obs.cameras["camera0"].segmentation_mask
+                    segmentation_id = get_segmentation_id(obs.cameras["camera0"].instance_id_seg_id2label, args.task)
+                pnt_cloud = pnt_cloud_getter.get_point_cloud(
+                    new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu(), segmentation_mask, segmentation_id
+                )
+                if DEBUG_PCD:
+                    save_folder = f"tmp/visualize/{args.task}L{args.random.level}"
+                    os.makedirs(save_folder, exist_ok=True)
+                    for single_pcd in pnt_cloud:
+                        single_pcd = single_pcd.cpu().numpy()
+                        pcd_filename = os.path.join(save_folder, f"demo_{demo_start_idx:04d}_step_{step}.npy")
+                        np.save(pcd_filename, single_pcd)
+                    raise NotImplementedError("DEBUG")
+
                 new_obs["point_cloud"] = pnt_cloud
-                if not "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
+                if "pcds" not in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
                     feat_dim = policyRunner.yaml_cfg.task.shape_meta.obs.point_cloud.shape[-1]
-                    new_obs["point_cloud"] = new_obs["point_cloud"][...,:feat_dim]
+                    new_obs["point_cloud"] = new_obs["point_cloud"][..., :feat_dim]
             images_list.append(np.array(new_obs["rgb"].cpu()))
-            #for key, value in new_obs.items():
+            # for key, value in new_obs.items():
             #    print(f"Key: {key}, Value shape: {value.shape}")
             action = policyRunner.get_action(new_obs)
             for round_i in range(action_set_steps):
