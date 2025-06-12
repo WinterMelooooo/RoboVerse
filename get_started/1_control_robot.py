@@ -37,9 +37,7 @@ class Args:
     robot: str = "franka"
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
-        "isaaclab"
-    )
+    sim: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco"] = "isaaclab"
 
     ## Others
     num_envs: int = 1
@@ -54,7 +52,7 @@ args = tyro.cli(Args)
 
 # initialize scenario
 scenario = ScenarioCfg(
-    robot=args.robot,
+    robots=[args.robot],
     try_add_table=False,
     sim=args.sim,
     headless=args.headless,
@@ -149,17 +147,19 @@ obs_saver = ObsSaver(video_path=f"get_started/output/1_move_robot_{args.sim}.mp4
 obs_saver.add(obs)
 
 step = 0
-robot_joint_limits = scenario.robot.joint_limits
+robot = scenario.robots[0]
 for _ in range(100):
     log.debug(f"Step {step}")
     actions = [
         {
-            "dof_pos_target": {
-                joint_name: (
-                    torch.rand(1).item() * (robot_joint_limits[joint_name][1] - robot_joint_limits[joint_name][0])
-                    + robot_joint_limits[joint_name][0]
-                )
-                for joint_name in robot_joint_limits.keys()
+            robot.name: {
+                "dof_pos_target": {
+                    joint_name: (
+                        torch.rand(1).item() * (robot.joint_limits[joint_name][1] - robot.joint_limits[joint_name][0])
+                        + robot.joint_limits[joint_name][0]
+                    )
+                    for joint_name in robot.joint_limits.keys()
+                }
             }
         }
         for _ in range(scenario.num_envs)

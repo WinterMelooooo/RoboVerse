@@ -41,7 +41,7 @@ class Args(ScenarioCfg):
     task: str = "debug:reach_far_away"
     robot: str = "franka"
     num_envs: int = 16
-    sim: Literal["isaaclab", "isaacgym", "mujoco", "genesis"] = "isaaclab"
+    sim: Literal["isaaclab", "isaacgym", "mujoco", "genesis", "mjx"] = "isaaclab"
 
 
 args = tyro.cli(Args)
@@ -59,7 +59,7 @@ class MetaSimVecEnv(VectorEnv):
     ):
         """Initialize the environment."""
         if scenario is None:
-            scenario = ScenarioCfg(task="pick_cube", robot="franka")
+            scenario = ScenarioCfg(task="pick_cube", robots=["franka"])
             scenario.task = task_name
             scenario.num_envs = num_envs
             scenario = ScenarioCfg(**vars(scenario))
@@ -71,7 +71,7 @@ class MetaSimVecEnv(VectorEnv):
         self.scenario = scenario
 
         # Get candidate states
-        self.candidate_init_states, _, _ = get_traj(scenario.task, scenario.robot)
+        self.candidate_init_states, _, _ = get_traj(scenario.task, scenario.robots[0])
 
         # XXX: is the inf space ok?
         self.single_observation_space = spaces.Box(-np.inf, np.inf)
@@ -122,7 +122,7 @@ class MetaSimVecEnv(VectorEnv):
         states = self.env.handler.get_states()
         tot_reward = torch.zeros(self.num_envs, device=self.env.handler.device)
         for reward_fn, weight in zip(self.scenario.task.reward_functions, self.scenario.task.reward_weights):
-            tot_reward += weight * reward_fn(states, self.scenario.robot.name)
+            tot_reward += weight * reward_fn(states, self.scenario.robots[0].name)
         return tot_reward
 
     def _get_default_states(self, seed: int | None = None):
@@ -136,7 +136,7 @@ class StableBaseline3VecEnv(VecEnv):
 
     def __init__(self, env: MetaSimVecEnv):
         """Initialize the environment."""
-        joint_limits = env.scenario.robot.joint_limits
+        joint_limits = env.scenario.robots[0].joint_limits
 
         # TODO: customize action space?
         self.action_space = spaces.Box(
@@ -169,7 +169,12 @@ class StableBaseline3VecEnv(VecEnv):
     def step_async(self, actions: np.ndarray) -> None:
         """Asynchronously step the environment."""
         self.action_dicts = [
-            {"dof_pos_target": dict(zip(self.env.scenario.robot.joint_limits.keys(), action))} for action in actions
+            {
+                self.env.scenario.robots[0].name: {
+                    "dof_pos_target": dict(zip(self.env.scenario.robots[0].joint_limits.keys(), action))
+                }
+            }
+            for action in actions
         ]
 
     def step_wait(self):
@@ -227,7 +232,7 @@ class StableBaseline3VecEnv(VecEnv):
 def train_ppo():
     """Train PPO for reaching task."""
     ## Choice 1: use scenario config to initialize the environment
-    scenario = ScenarioCfg(**vars(args))
+    scenario = ScenarioCfg(task=args.task, robots=[args.robot], sim=args.sim, num_envs=args.num_envs)
     scenario.cameras = []  # XXX: remove cameras to avoid rendering to speed up
     metasim_env = MetaSimVecEnv(scenario, task_name=args.task, num_envs=args.num_envs, sim=args.sim)
 
@@ -277,7 +282,8 @@ def train_ppo():
     for _ in range(100):
         actions, _ = model.predict(obs.cpu().numpy(), deterministic=True)
         action_dicts = [
-            {"dof_pos_target": dict(zip(metasim_env.scenario.robot.joint_limits.keys(), action))} for action in actions
+            {"dof_pos_target": dict(zip(metasim_env.scenario.robots[0].joint_limits.keys(), action))}
+            for action in actions
         ]
         obs, _, _, _, _ = metasim_env.step(action_dicts)
 

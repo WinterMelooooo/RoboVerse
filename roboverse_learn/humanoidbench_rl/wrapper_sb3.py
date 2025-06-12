@@ -22,13 +22,13 @@ class Sb3EnvWrapper(VecEnv):
         if SimType(scenario.sim) == SimType.MUJOCO:
             self.sim_device = torch.device("cpu")
         self.num_envs = scenario.num_envs
-        self.robot = scenario.robot
+        self.robot = scenario.robots[0]
         self.task = scenario.task
 
         env_class = get_sim_env_class(SimType(scenario.sim))
         self.env = env_class(scenario)
 
-        self.init_states, _, _ = get_traj(scenario.task, scenario.robot, self.env.handler)
+        self.init_states, _, _ = get_traj(scenario.task, scenario.robots[0], self.env.handler)
         if len(self.init_states) < self.num_envs:
             self.init_states = (
                 self.init_states * (self.num_envs // len(self.init_states))
@@ -37,6 +37,7 @@ class Sb3EnvWrapper(VecEnv):
         else:
             self.init_states = self.init_states[: self.num_envs]
 
+        # FIXME action limit differs with joint limit in locomotion configuration(desire pos = scale*action + default pos)
         # Set up action space based on robot joint limits
         joint_limits = self.robot.joint_limits
         action_low = []

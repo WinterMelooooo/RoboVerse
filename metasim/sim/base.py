@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 import torch
 from loguru import logger as log
 
+from metasim.cfg.robots import BaseRobotCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.types import Action, EnvState, Extra, Obs, Reward, Success, TimeOut
 from metasim.utils.state import TensorState, state_tensor_to_nested
 
 
-class BaseSimHandler:
+class BaseSimHandler(ABC):
     """Base class for simulation handler."""
 
     def __init__(self, scenario: ScenarioCfg):
@@ -25,15 +28,17 @@ class BaseSimHandler:
 
         ## For quick reference
         self.task = scenario.task
-        self.robot = scenario.robot
+        self.robots = scenario.robots
         self.cameras = scenario.cameras
         self.sensors = scenario.sensors
         self.objects = scenario.objects
         self.checker = scenario.checker
-        self.object_dict = {obj.name: obj for obj in self.objects + [self.robot] + self.checker.get_debug_viewers()}
+        self.object_dict = {obj.name: obj for obj in self.objects + self.robots + self.checker.get_debug_viewers()}
         """A dict mapping object names to object cfg instances. It includes objects, robot, and checker debug viewers."""
+        self._state_cache_expire = True
 
     def launch(self) -> None:
+        """Launch the simulation."""
         raise NotImplementedError
 
     ############################################################
@@ -43,8 +48,7 @@ class BaseSimHandler:
         raise NotImplementedError
 
     def reset(self, env_ids: list[int] | None = None) -> tuple[TensorState, Extra]:
-        """
-        Reset the environment.
+        """Reset the environment.
 
         Args:
             env_ids: The indices of the environments to reset. If None, all environments are reset.
@@ -59,15 +63,28 @@ class BaseSimHandler:
         raise NotImplementedError
 
     def close(self) -> None:
+        """Close the simulation."""
         raise NotImplementedError
 
     ############################################################
     ## Set states
     ############################################################
     def set_states(self, states: list[EnvState], env_ids: list[int] | None = None) -> None:
+        """Set the states of the environment.
+
+        Args:
+            states (dict): A dictionary containing the states of the environment
+            env_ids (list[int]): List of environment ids to set the states. If None, set the states of all environments
+        """
         raise NotImplementedError
 
     def set_dof_targets(self, obj_name: str, actions: list[Action]) -> None:
+        """Set the dof targets of the robot.
+
+        Args:
+            obj_name (str): The name of the robot
+            actions (list[Action]): The target actions for the robot
+        """
         raise NotImplementedError
 
     def set_pose(self, obj_name: str, pos: torch.Tensor, rot: torch.Tensor, env_ids: list[int] | None = None) -> None:
@@ -77,8 +94,23 @@ class BaseSimHandler:
     ############################################################
     ## Get states
     ############################################################
+    @abstractmethod
+    def _get_states(self, env_ids: list[int] | None = None) -> list[EnvState]:
+        """Get the states of the environment.
+
+        Args:
+            env_ids: List of environment ids to get the states from. If None, get the states of all environments.
+
+        Returns:
+            dict: A dictionary containing the states of the environment
+        """
+        pass
+
     def get_states(self, env_ids: list[int] | None = None) -> list[EnvState]:
-        raise NotImplementedError
+        if self._state_cache_expire:
+            self._states = self._get_states(env_ids=env_ids)
+            self._state_cache_expire = False
+        return self._states
 
     def get_vel(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
         if self.num_envs > 1:
@@ -149,13 +181,20 @@ class BaseSimHandler:
     ############################################################
     ## Simulate
     ############################################################
+    @abstractmethod
+    def _simulate(self):
+        pass
+
     def simulate(self):
-        raise NotImplementedError
+        """Simulate the environment."""
+        self._state_cache_expire = True
+        self._simulate()
 
     ############################################################
     ## Utils
     ############################################################
     def refresh_render(self) -> None:
+        """Refresh the render."""
         raise NotImplementedError
 
     ############################################################
@@ -259,18 +298,25 @@ class BaseSimHandler:
 
     @property
     def episode_length_buf(self) -> list[int]:
-        """
-        The timestep of each environment, restart from 0 when reset, plus 1 at each step.
-        """
+        """The timestep of each environment, restart from 0 when reset, plus 1 at each step."""
         raise NotImplementedError
 
     @property
     def actions_cache(self) -> list[Action]:
-        """
-        Cache of actions.
-        """
+        """Cache of actions."""
         raise NotImplementedError
 
     @property
     def device(self) -> torch.device:
         raise NotImplementedError
+
+    ############################################################
+    ## Temporary
+    ############################################################
+
+    @property
+    def robot(self) -> BaseRobotCfg:
+        """The robot in the scenario. This is only for temporary use, we should remove this property in the future."""
+        if len(self.robots) > 1:
+            log.warning("Only the first robot is used for now, the others are ignored")
+        return self.robots[0]

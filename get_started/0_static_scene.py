@@ -37,9 +37,7 @@ class Args:
     robot: str = "franka"
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
-        "isaaclab"
-    )
+    sim: Literal["isaacgym", "isaaclab", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "isaaclab"
 
     ## Others
     num_envs: int = 1
@@ -54,7 +52,7 @@ args = tyro.cli(Args)
 
 # initialize scenario
 scenario = ScenarioCfg(
-    robot=args.robot,
+    robots=[args.robot],
     try_add_table=False,
     sim=args.sim,
     headless=args.headless,

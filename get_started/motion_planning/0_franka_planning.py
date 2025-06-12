@@ -48,9 +48,7 @@ class Args:
     robot: str = "franka"
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
-        "isaaclab"
-    )
+    sim: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco"] = "isaaclab"
 
     ## Others
     num_envs: int = 1
@@ -65,7 +63,7 @@ args = tyro.cli(Args)
 
 # initialize scenario
 scenario = ScenarioCfg(
-    robot=args.robot,
+    robots=[args.robot],
     try_add_table=False,
     sim=args.sim,
     headless=args.headless,
@@ -107,10 +105,10 @@ init_states = [
     for _ in range(args.num_envs)
 ]
 
-robot = scenario.robot
+robot = scenario.robots[0]
 *_, robot_ik = get_curobo_models(robot)
 curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
-ee_n_dof = len(robot.gripper_release_q)
+ee_n_dof = len(robot.gripper_open_q)
 
 obs, extras = env.reset(states=init_states)
 os.makedirs("get_started/output", exist_ok=True)
@@ -135,7 +133,8 @@ def move_to_pose(
     q[ik_succ, :curobo_n_dof] = result.solution[ik_succ, 0].clone()
     q[:, -ee_n_dof:] = 0.04 if open_gripper else 0.0
     actions = [
-        {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))} for i_env in range(scenario.num_envs)
+        {robot.name: {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))}}
+        for i_env in range(scenario.num_envs)
     ]
     for i in range(steps):
         obs, reward, success, time_out, extras = env.step(actions)
@@ -144,7 +143,7 @@ def move_to_pose(
 
 
 step = 0
-robot_joint_limits = scenario.robot.joint_limits
+robot_joint_limits = scenario.robots[0].joint_limits
 for step in range(4):
     log.debug(f"Step {step}")
     states = env.handler.get_states()

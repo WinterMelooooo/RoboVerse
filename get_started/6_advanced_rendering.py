@@ -39,9 +39,7 @@ class Args:
     render: RenderCfg = RenderCfg()
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
-        "isaaclab"
-    )
+    sim: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco"] = "isaaclab"
 
     ## Others
     num_envs: int = 1
@@ -56,7 +54,7 @@ args = tyro.cli(Args)
 
 # initialize scenario
 scenario = ScenarioCfg(
-    robot=args.robot,
+    robots=[args.robot],
     try_add_table=False,
     sim=args.sim,
     render=args.render,

@@ -57,13 +57,13 @@ def main():
     args = parse_args()
     num_envs: int = args.num_envs
     scenario = ScenarioCfg(
-        task=args.task, robot=args.robot, try_add_table=args.add_table, sim=args.sim, num_envs=num_envs
+        task=args.task, robots=[args.robot], try_add_table=args.add_table, sim=args.sim, num_envs=num_envs
     )
     robot = get_robot(args.robot)
 
     *_, robot_ik = get_curobo_models(robot)
     curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
-    ee_n_dof = len(robot.gripper_release_q)
+    ee_n_dof = len(robot.gripper_open_q)
 
     log.info(f"Using simulator: {args.sim}")
     env_class = get_sim_env_class(SimType(args.sim))
@@ -74,7 +74,7 @@ def main():
     assert os.path.exists(scenario.task.traj_filepath), (
         f"Trajectory file: {scenario.task.traj_filepath} does not exist."
     )
-    init_states, all_actions, all_states = get_traj(scenario.task, scenario.robot, env.handler)
+    init_states, all_actions, all_states = get_traj(scenario.task, scenario.robots[0], env.handler)
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
     ## Reset before first step
@@ -84,9 +84,9 @@ def main():
     log.trace(f"Time to reset: {toc - tic:.2f}s")
 
     # Generate random actions
-    random_gripper_widths = torch.rand((num_envs, len(robot.gripper_release_q)))
-    random_gripper_widths = torch.tensor(robot.gripper_release_q) + random_gripper_widths * (
-        torch.tensor(robot.gripper_actuate_q) - torch.tensor(robot.gripper_release_q)
+    random_gripper_widths = torch.rand((num_envs, len(robot.gripper_open_q)))
+    random_gripper_widths = torch.tensor(robot.gripper_open_q) + random_gripper_widths * (
+        torch.tensor(robot.gripper_close_q) - torch.tensor(robot.gripper_open_q)
     )
 
     ee_rot_target = torch.rand((num_envs, 3), device="cuda:0") * torch.pi
@@ -125,9 +125,12 @@ def main():
     q[ik_succ, :curobo_n_dof] = result.solution[ik_succ, 0].clone()
     q[:, -ee_n_dof:] = random_gripper_widths
 
-    actions = [{"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))} for i_env in range(num_envs)]
+    actions = [
+        {robot.name: {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))}}
+        for i_env in range(num_envs)
+    ]
 
-    robot_joint_limits = scenario.robot.joint_limits
+    robot_joint_limits = scenario.robots[0].joint_limits
     # actions = [
     #     {
     #         "dof_pos_target": {
@@ -147,7 +150,7 @@ def main():
     step = 0
     while True:
         log.debug(f"Step {step}")
-        actions[0]["dof_pos_target"].update({
+        actions[0][robot.name]["dof_pos_target"].update({
             joint_name: (
                 torch.rand(1).item() * (robot_joint_limits[joint_name][1] - robot_joint_limits[joint_name][0])
                 + robot_joint_limits[joint_name][0]

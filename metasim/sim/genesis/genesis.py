@@ -7,7 +7,7 @@ from genesis.engine.entities.rigid_entity import RigidEntity, RigidJoint
 from genesis.vis.camera import Camera
 from loguru import logger as log
 
-from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg
+from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg, _FileBasedMixin
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.sim import BaseSimHandler, GymEnvWrapper
 from metasim.types import Action, EnvState
@@ -24,7 +24,10 @@ class GenesisHandler(BaseSimHandler):
     def launch(self) -> None:
         gs.init(backend=gs.gpu)  # TODO: add option for cpu
         self.scene_inst = gs.Scene(
-            sim_options=gs.options.SimOptions(substeps=1),  # TODO: substeps > 1 doesn't work
+            sim_options=gs.options.SimOptions(
+                dt=self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 1 / 100,
+                substeps=1,
+            ),  # TODO: substeps > 1 doesn't work
             vis_options=gs.options.VisOptions(n_rendered_envs=self.scenario.num_envs),
             viewer_options=gs.options.ViewerOptions(
                 camera_pos=(3.5, 0.0, 2.5),
@@ -51,11 +54,12 @@ class GenesisHandler(BaseSimHandler):
 
         ## Add objects
         for obj in self.scenario.objects:
-            if isinstance(obj.scale, tuple) or isinstance(obj.scale, list):
-                obj.scale = obj.scale[0]
-                log.warning(
-                    f"Genesis does not support different scaling for each axis for {obj.name}, using scale={obj.scale}"
-                )
+            if isinstance(obj, _FileBasedMixin):
+                if isinstance(obj.scale, tuple) or isinstance(obj.scale, list):
+                    obj.scale = obj.scale[0]
+                    log.warning(
+                        f"Genesis does not support different scaling for each axis for {obj.name}, using scale={obj.scale}"
+                    )
             if isinstance(obj, PrimitiveCubeCfg):
                 obj_inst = self.scene_inst.add_entity(
                     gs.morphs.Box(size=obj.size), surface=gs.surfaces.Default(color=obj.color)
@@ -88,7 +92,7 @@ class GenesisHandler(BaseSimHandler):
 
         self.scene_inst.build(n_envs=self.scenario.num_envs, env_spacing=(2, 2))
 
-    def get_states(self, env_ids: list[int] | None = None) -> list[EnvState]:
+    def _get_states(self, env_ids: list[int] | None = None) -> list[EnvState]:
         if env_ids is None:
             env_ids = list(range(self.num_envs))
 
@@ -196,7 +200,10 @@ class GenesisHandler(BaseSimHandler):
     def set_dof_targets(self, obj_name: str, actions: list[Action]) -> None:
         self._actions_cache = actions
         position = [
-            [actions[env_id]["dof_pos_target"][jn] for jn in self.get_joint_names(obj_name, sort=False)]
+            [
+                actions[env_id][self.robot.name]["dof_pos_target"][jn]
+                for jn in self.get_joint_names(obj_name, sort=False)
+            ]
             for env_id in range(self.num_envs)
         ]
         if self.object_dict[obj_name].fix_base_link:
@@ -214,7 +221,7 @@ class GenesisHandler(BaseSimHandler):
                 ],
             )
 
-    def simulate(self):
+    def _simulate(self):
         for _ in range(self.scenario.decimation):
             self.scene_inst.step()
 

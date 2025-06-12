@@ -1,7 +1,7 @@
 """Implemention of Sapien Handler.
 
-This file contains the implementation of SapienHandler, which is a subclass of BaseSimHandler.
-SapienHandler is used to handle the simulation environment using Sapien.
+This file contains the implementation of Sapien2Handler, which is a subclass of BaseSimHandler.
+Sapien2Handler is used to handle the simulation environment using Sapien.
 Currently using Sapien 2.2
 """
 
@@ -27,22 +27,15 @@ from metasim.cfg.objects import (
 )
 from metasim.cfg.robots import BaseRobotCfg
 from metasim.sim import BaseSimHandler, EnvWrapper, GymEnvWrapper
-from metasim.sim.parallel import ParallelSimWrapper
 from metasim.types import Action, EnvState
 from metasim.utils.math import quat_from_euler_np
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
 
-class SingleSapien3Handler(BaseSimHandler):
-    """Sapien Handler class."""
+class Sapien3Handler(BaseSimHandler):
+    """Sapien3 Handler class."""
 
     def __init__(self, scenario):
-        """Initialize the Sapien Handler.
-
-        Args:
-            scenario: The scenario configuration
-            num_envs: Number of environments
-        """
         assert parse_version(sapien.__version__) >= parse_version("3.0.0a0"), "Sapien3 is required"
         assert parse_version(sapien.__version__) < parse_version("4.0.0"), "Sapien3 is required"
         log.warning("Sapien3 is still under development, some metasim apis yet don't have sapien3 support")
@@ -53,8 +46,6 @@ class SingleSapien3Handler(BaseSimHandler):
     def _build_sapien(self):
         self.engine = sapien_core.Engine()  # Create a physical simulation engine
         self.renderer = sapien_core.SapienRenderer()  # Create a renderer
-
-        self.time_step = 1 / 100.0
 
         scene_config = sapien_core.SceneConfig()
         # scene_config.default_dynamic_friction = self.physical_params.dynamic_friction
@@ -69,7 +60,7 @@ class SingleSapien3Handler(BaseSimHandler):
 
         self.engine.set_renderer(self.renderer)
         self.scene = self.engine.create_scene(scene_config)
-        self.scene.set_timestep(self.time_step)
+        self.scene.set_timestep(self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 1 / 100)
         ground_material = self.renderer.create_material()
         ground_material.base_color = np.array([202, 164, 114, 256]) / 256
         ground_material.specular = 0.5
@@ -161,12 +152,12 @@ class SingleSapien3Handler(BaseSimHandler):
                 actor_builder = self.scene.create_actor_builder()
                 # material = get_material(self.scene, agent.rigid_shape_property)
                 actor_builder.add_box_collision(
-                    half_size=[x * s for x, s in zip(object.half_size, object.scale)],
+                    half_size=object.half_size,
                     density=object.density,
                     # material=material,
                 )
                 actor_builder.add_box_visual(
-                    half_size=[x * s for x, s in zip(object.half_size, object.scale)],
+                    half_size=object.half_size,
                     # color=object.color if object.color else [1.0, 1.0, 0.0],
                     material=sapien_core.render.RenderMaterial(
                         base_color=object.color[:3] + [1] if object.color else [1.0, 1.0, 0.0, 1.0]
@@ -191,7 +182,7 @@ class SingleSapien3Handler(BaseSimHandler):
                 # material = get_material(self.scene, agent.rigid_shape_property)
                 actor_builder.add_sphere_collision(radius=object.radius, density=object.density)
                 actor_builder.add_sphere_visual(
-                    radius=object.radius * object.scale[0],
+                    radius=object.radius,
                     material=sapien_core.render.RenderMaterial(
                         base_color=object.color[:3] + [1] if object.color else [1.0, 1.0, 0.0, 1.0]
                     ),
@@ -347,12 +338,6 @@ class SingleSapien3Handler(BaseSimHandler):
         # instance.set_drive_target(action)
 
     def set_dof_targets(self, obj_name, target: list[Action]):
-        """Set the dof targets of the object.
-
-        Args:
-            obj_name (str): The name of the object
-            target (dict): The target values for the object
-        """
         instance = self.object_ids[obj_name]
         if isinstance(instance, sapien_core.physx.PhysxArticulation):
             action = target[0]
@@ -368,8 +353,7 @@ class SingleSapien3Handler(BaseSimHandler):
             self._previous_dof_vel_target[obj_name] = vel_target_arr
             self._apply_action(instance, pos_target, vel_target)
 
-    def simulate(self):
-        """Step the simulation."""
+    def _simulate(self):
         for i in range(self.scenario.decimation):
             self.scene.step()
             self.scene.update_render()
@@ -379,11 +363,9 @@ class SingleSapien3Handler(BaseSimHandler):
             camera_id.take_picture()
 
     def launch(self) -> None:
-        """Launch the simulation."""
         self._build_sapien()
 
     def close(self):
-        """Close the simulation."""
         if not self.headless:
             self.viewer.close()
         self.scene = None
@@ -407,16 +389,7 @@ class SingleSapien3Handler(BaseSimHandler):
         link_state_tensor = torch.cat(link_state_list, dim=0)
         return link_name_list, link_state_tensor
 
-    def get_states(self, env_ids=None) -> list[EnvState]:
-        """Get the states of the environment.
-
-        Args:
-            env_ids: List of environment ids to get the states from. If None, get the states of all environments.
-
-        Returns:
-            dict: A dictionary containing the states of the environment
-        """
-
+    def _get_states(self, env_ids=None) -> list[EnvState]:
         object_states = {}
         for obj in self.objects:
             obj_inst = self.object_ids[obj.name]
@@ -500,7 +473,6 @@ class SingleSapien3Handler(BaseSimHandler):
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, sensors={})
 
     def refresh_render(self):
-        """Refresh the render."""
         self.scene.update_render()
         if not self.headless:
             self.viewer.render()
@@ -508,12 +480,6 @@ class SingleSapien3Handler(BaseSimHandler):
             camera_id.take_picture()
 
     def set_states(self, states, env_ids=None):
-        """Set the states of the environment.
-
-        Args:
-            states (dict): A dictionary containing the states of the environment
-            env_ids (list[int]): List of environment ids to set the states. If None, set the states of all environments
-        """
         states_flat = [state["objects"] | state["robots"] for state in states]
         for name, val in states_flat[0].items():
             if name not in self.object_ids:
@@ -550,16 +516,6 @@ class SingleSapien3Handler(BaseSimHandler):
             return []
 
     def get_body_names(self, obj_name, sort=True):
-        """Get the names of links of an object by obj_name
-
-        Args:
-            obj_name: the name of the object to get link names.
-            sort: if sort the link names by lexical order.
-
-        Returns:
-            list: the list of link names.
-        """
-
         body_names = deepcopy([link.name for link in self.link_ids[obj_name]])
         if sort:
             return sorted(body_names)
@@ -567,7 +523,4 @@ class SingleSapien3Handler(BaseSimHandler):
             return deepcopy(body_names)
 
 
-Sapien3Handler = ParallelSimWrapper(SingleSapien3Handler)
-"""SAPIEN3 Handler"""
-
-Sapien3Env: type[EnvWrapper[Sapien3Handler]] = GymEnvWrapper(Sapien3Handler)  # type: ignore
+Sapien3Env: type[EnvWrapper[Sapien3Handler]] = GymEnvWrapper(Sapien3Handler)

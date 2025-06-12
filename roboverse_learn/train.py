@@ -22,12 +22,12 @@ def parse_args():
         "--sim",
         type=str,
         default="isaaclab",
-        choices=["isaaclab", "isaacgym", "pyrep", "pybullet", "sapien", "mujoco"],
+        choices=["isaaclab", "isaacgym", "genesis", "pybullet", "mujoco", "sapien2", "sapien3"],
     )
     parser.add_argument(
         "--render",
         type=str,
-        choices=["isaaclab", "isaacgym", "pyrep", "pybullet", "sapien", "mujoco"],
+        choices=["isaaclab", "isaacgym", "genesis", "pybullet", "mujoco", "sapien2", "sapien3"],
     )
     args = parser.parse_args()
     return args
@@ -56,7 +56,7 @@ def main():
     )
     scenario = ScenarioCfg(
         task=args.task,
-        robot=args.robot,
+        robots=[args.robot],
         cameras=[camera],
         sim=args.sim,
         renderer=args.render,

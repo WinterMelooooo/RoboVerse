@@ -40,7 +40,10 @@ class SinglePybulletHandler(BaseSimHandler):
 
     def _build_pybullet(self):
         self.client = p.connect(p.GUI)
-        p.setPhysicsEngineParameter(fixedTimeStep=1 / 60.0, numSolverIterations=300)
+        p.setPhysicsEngineParameter(
+            fixedTimeStep=self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 1.0 / 240.0,
+            numSolverIterations=300,
+        )
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.81)
 
@@ -145,7 +148,7 @@ class SinglePybulletHandler(BaseSimHandler):
                 # p.resetBasePositionAndOrientation(agent.instance, pos, wxyz_to_xyzw(rot))
 
             elif isinstance(object, PrimitiveCubeCfg):
-                box_dimensions = [x * s for x, s in zip(object.half_size, object.scale)]
+                box_dimensions = object.half_size
                 pos = np.array([0, 0, 0])
                 rot = np.array([1, 0, 0, 0])
                 box_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=box_dimensions)
@@ -159,7 +162,7 @@ class SinglePybulletHandler(BaseSimHandler):
                 self.object_joint_order[object.name] = []
 
             elif isinstance(object, PrimitiveSphereCfg):
-                radius = object.radius * object.scale[0]
+                radius = object.radius
                 pos = np.array([0, 0, 0])
                 rot = np.array([1, 0, 0, 0])
                 sphere_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
@@ -242,10 +245,12 @@ class SinglePybulletHandler(BaseSimHandler):
         # For multi-env version, rewrite this function
         self._actions_cache = actions
         action = actions[0]
-        action_arr = np.array([action["dof_pos_target"][name] for name in self.object_joint_order[obj_name]])
+        action_arr = np.array([
+            action[self.robot.name]["dof_pos_target"][name] for name in self.object_joint_order[obj_name]
+        ])
         self._apply_action(action_arr, self.object_ids[obj_name])
 
-    def simulate(self):
+    def _simulate(self):
         """Step the simulation."""
         # # Rewrite this function for multi-env version
         # action = actions[0]
@@ -304,7 +309,7 @@ class SinglePybulletHandler(BaseSimHandler):
     ############################################################
     ## Get states
     ############################################################
-    def get_states(self, env_ids=None) -> list[EnvState]:
+    def _get_states(self, env_ids=None) -> list[EnvState]:
         """Get the states of the environment.
 
         Returns:

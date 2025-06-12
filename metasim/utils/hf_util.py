@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from multiprocessing import Pool
 
-from huggingface_hub import HfApi, HfFileSystem, hf_hub_download
+from huggingface_hub import HfApi, hf_hub_download
 from loguru import logger as log
 
 from metasim.cfg.objects import BaseObjCfg, PrimitiveCubeCfg, PrimitiveCylinderCfg, PrimitiveSphereCfg
@@ -22,7 +22,6 @@ REPO_ID = "RoboVerseOrg/roboverse_data"
 LOCAL_DIR = "roboverse_data"
 
 hf_api = HfApi()
-hf_fs = HfFileSystem()
 
 
 def _check_and_download_single(filepath: str):
@@ -32,18 +31,13 @@ def _check_and_download_single(filepath: str):
         filepath: the filepath to check and download.
     """
     local_exists = os.path.exists(filepath)
-    hf_exists = hf_fs.exists(os.path.join("datasets", REPO_ID, os.path.relpath(filepath, LOCAL_DIR)))
-
     if local_exists:
-        ## In this case, the runner is a developer who has the file in their local machine.
-        if hf_exists:
-            log.info(f"File {filepath} found in local directory.")
-            return
-        else:
-            log.warning(f"Please upload the file {filepath} to the huggingface dataset!")
-            return
+        ## In this case, the runner has the file in their local machine.
+        log.info(f"File {filepath} found in local directory.")
+        return
     else:
         ## In this case, we didn't find the file in the local directory, the circumstance is complicated.
+        hf_exists = hf_api.file_exists(REPO_ID, os.path.relpath(filepath, LOCAL_DIR), repo_type="dataset")
 
         ## Make sure the file exists in the huggingface dataset.
         if not hf_exists:
@@ -52,7 +46,7 @@ def _check_and_download_single(filepath: str):
                 " report this issue to the developers."
             )
 
-        ## Also, we need to exclude a circumstance that a developer forgot to update the submodule.
+        ## Also, we need to exclude a circumstance that user forgot to update the submodule.
         using_hf_git = os.path.exists(os.path.join(LOCAL_DIR, ".git"))
         if using_hf_git:
             raise Exception(
@@ -116,7 +110,8 @@ class FileDownloader:
 
         for obj in objects:
             self._add_from_object(obj)
-        self._add_from_object(self.scenario.robot)
+        for robot in self.scenario.robots:
+            self._add_from_object(robot)
         if self.scenario.scene is not None:
             self._add_from_object(self.scenario.scene)
         if self.scenario.task is not None:
@@ -131,7 +126,7 @@ class FileDownloader:
                 and traj_filepath.find(".yaml") == -1
                 and traj_filepath.find(".yml") == -1
             ):
-                traj_filepath = os.path.join(traj_filepath, f"{self.scenario.robot.name}_v2.pkl.gz")
+                traj_filepath = os.path.join(traj_filepath, f"{self.scenario.robots[0].name}_v2.pkl.gz")
             self._add(traj_filepath)
 
     def _add_from_object(self, obj: BaseObjCfg):
@@ -145,10 +140,14 @@ class FileDownloader:
 
         if self.scenario.sim in ["isaaclab"]:
             self._add(obj.usd_path)
-        elif self.scenario.sim in ["isaacgym", "pybullet", "sapien", "sapien3", "genesis"]:
+        elif self.scenario.sim in ["pybullet", "sapien2", "sapien3", "genesis"] or (
+            self.scenario.sim == "isaacgym" and not obj.isaacgym_read_mjcf
+        ):
             self._add(obj.urdf_path)
-        elif self.scenario.sim in ["mujoco"]:
+        elif self.scenario.sim in ["mujoco"] or (self.scenario.sim == "isaacgym" and obj.isaacgym_read_mjcf):
             self._add(obj.mjcf_path)
+        elif self.scenario.sim in ["mjx"]:
+            self._add(obj.mjx_mjcf_path)
 
     def _add(self, filepath: str):
         self.files_to_download.append(filepath)

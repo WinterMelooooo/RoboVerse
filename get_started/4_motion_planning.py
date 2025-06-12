@@ -39,9 +39,7 @@ class Args:
     robot: str = "franka"
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
-        "isaaclab"
-    )
+    sim: Literal["isaaclab", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco"] = "isaaclab"
 
     ## Others
     num_envs: int = 1
@@ -56,7 +54,7 @@ args = tyro.cli(Args)
 
 # initialize scenario
 scenario = ScenarioCfg(
-    robot=args.robot,
+    robots=[args.robot],
     try_add_table=False,
     sim=args.sim,
     headless=args.headless,
@@ -159,10 +157,10 @@ init_states = [
 ]
 
 
-robot = scenario.robot
+robot = scenario.robots[0]
 *_, robot_ik = get_curobo_models(robot)
 curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
-ee_n_dof = len(robot.gripper_release_q)
+ee_n_dof = len(robot.gripper_open_q)
 
 obs, extras = env.reset(states=init_states)
 os.makedirs("get_started/output", exist_ok=True)
@@ -173,14 +171,14 @@ obs_saver = ObsSaver(video_path=f"get_started/output/4_motion_planning_{args.sim
 obs_saver.add(obs)
 
 step = 0
-robot_joint_limits = scenario.robot.joint_limits
+robot_joint_limits = scenario.robots[0].joint_limits
 for step in range(200):
     log.debug(f"Step {step}")
     states = env.handler.get_states()
     curr_robot_q = states.robots[robot.name].joint_pos.cuda()
 
     seed_config = curr_robot_q[:, :curobo_n_dof].unsqueeze(1).tile([1, robot_ik._num_seeds, 1])
-    if scenario.robot.name == "franka":
+    if scenario.robots[0].name == "franka":
         x_target = 0.3 + 0.1 * (step / 100)
         y_target = 0.5 - 0.5 * (step / 100)
         z_target = 0.6 - 0.2 * (step / 100)
@@ -197,7 +195,7 @@ for step in range(200):
             [[0.0, 1.0, 0.0, 0.0]] * args.num_envs,
             device="cuda:0",
         )
-    elif scenario.robot.name == "kinova_gen3_robotiq_2f85":
+    elif scenario.robots[0].name == "kinova_gen3_robotiq_2f85":
         ee_pos_target = torch.tensor([[0.2 + 0.2 * (step / 100), 0.0, 0.4]], device="cuda:0").repeat(args.num_envs, 1)
         ee_quat_target = torch.tensor(
             [[0.0, 0.0, 1.0, 0.0]] * args.num_envs,
@@ -210,8 +208,10 @@ for step in range(200):
     ik_succ = result.success.squeeze(1)
     q[ik_succ, :curobo_n_dof] = result.solution[ik_succ, 0].clone()
     q[:, -ee_n_dof:] = 0.04
+    robot = scenario.robots[0]
     actions = [
-        {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))} for i_env in range(scenario.num_envs)
+        {robot.name: {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))}}
+        for i_env in range(scenario.num_envs)
     ]
 
     obs, reward, success, time_out, extras = env.step(actions)

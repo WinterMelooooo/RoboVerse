@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import MISSING
 from typing import Literal
 
 from loguru import logger as log
@@ -12,6 +11,7 @@ from metasim.utils.hf_util import FileDownloader
 from metasim.utils.setup_util import get_robot, get_scene, get_task
 
 from .checkers import BaseChecker, EmptyChecker
+from .control import ControlCfg
 from .lights import BaseLightCfg, CylinderLightCfg, DistantLightCfg
 from .objects import BaseObjCfg
 from .randomization import RandomizationCfg
@@ -19,6 +19,7 @@ from .render import RenderCfg
 from .robots.base_robot_cfg import BaseRobotCfg
 from .scenes.base_scene_cfg import SceneCfg
 from .sensors import BaseCameraCfg, BaseSensorCfg, PinholeCameraCfg
+from .simulator_params import SimParamCfg
 from .tasks.base_task_cfg import BaseTaskCfg
 
 
@@ -28,7 +29,7 @@ class ScenarioCfg:
 
     task: BaseTaskCfg | None = None  # This item should be removed?
     """None means no task specified"""
-    robot: BaseRobotCfg = MISSING
+    robots: list[BaseRobotCfg] = []
     scene: SceneCfg | None = None
     """None means no scene"""
     lights: list[BaseLightCfg] = [DistantLightCfg()]
@@ -38,10 +39,12 @@ class ScenarioCfg:
     checker: BaseChecker = EmptyChecker()
     render: RenderCfg = RenderCfg()
     random: RandomizationCfg = RandomizationCfg()
+    sim_params: SimParamCfg = SimParamCfg()
+    control: ControlCfg = ControlCfg()
 
     ## Handlers
-    sim: Literal["isaaclab", "isaacgym", "pyrep", "pybullet", "sapien", "mujoco"] = "isaaclab"
-    renderer: Literal["isaaclab", "isaacgym", "pyrep", "pybullet", "sapien", "mujoco"] | None = None
+    sim: Literal["isaaclab", "isaacgym", "sapien2", "sapien3", "genesis", "pybullet", "mujoco"] = "isaaclab"
+    renderer: Literal["isaaclab", "isaacgym", "sapien2", "sapien3", "genesis", "pybullet", "mujoco"] | None = None
 
     ## Others
     num_envs: int = 1
@@ -71,10 +74,15 @@ class ScenarioCfg:
         ### Parse task and robot
         if isinstance(self.task, str):
             self.task = get_task(self.task)
-        if isinstance(self.robot, str):
-            self.robot = get_robot(self.robot)
+        for i, robot in enumerate(self.robots):
+            if isinstance(robot, str):
+                self.robots[i] = get_robot(robot)
         if isinstance(self.scene, str):
             self.scene = get_scene(self.scene)
 
-        ### Check and download all the paths
+        ### Simulator parameters overvide by task
+        self.sim_params = self.task.sim_params if self.task is not None else self.sim_params
+        ### Control parameters  overvide by task
+        self.control = self.task.control if self.task is not None else self.control
+
         FileDownloader(self).do_it()
