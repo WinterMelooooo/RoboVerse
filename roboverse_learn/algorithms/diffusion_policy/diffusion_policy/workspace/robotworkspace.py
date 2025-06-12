@@ -24,6 +24,7 @@ from omegaconf import OmegaConf
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -36,6 +37,7 @@ class RobotWorkspace(BaseWorkspace):
         self.local_rank = local_rank if local_rank is not None else 0
         self.world_size = world_size if world_size is not None else 1
         policy = cfg.optimizer.get("multigpu_lr_policy", None)
+        self.logger = cfg.logging.get("logger_name", "wandb")
         if not policy or policy == "sqrt":
             cfg.optimizer.lr = cfg.optimizer.lr * math.sqrt(self.world_size)
             if cfg.get("param_groups", None):
@@ -151,21 +153,25 @@ class RobotWorkspace(BaseWorkspace):
         # assert isinstance(env_runner, BaseImageRunner)
         env_runner = None
         wandb_run = None
+        writer = None
 
         # configure logging
         if self.local_rank == 0:
             if cfg.logging.mode == "online":
-                wandb_run = wandb.init(
-                    dir=str(self.output_dir),
-                    config=OmegaConf.to_container(cfg, resolve=True),
-                    **cfg.logging,
-                )
-                wandb.config.update(
-                    {
-                        "output_dir": self.output_dir,
-                    }
-                )
-
+                if self.logger == "wandb":
+                    wandb_run = wandb.init(
+                        dir=str(self.output_dir),
+                        config=OmegaConf.to_container(cfg, resolve=True),
+                        **cfg.logging,
+                    )
+                    wandb.config.update(
+                        {
+                            "output_dir": self.output_dir,
+                        }
+                    )
+                elif self.logger == "tensorboard":
+                    tb_logdir = os.path.join(self.output_dir, "tb_logs")
+                    writer = SummaryWriter(log_dir=tb_logdir)
         # configure checkpoint
         topk_manager = TopKCheckpointManager(
             save_dir=os.path.join(self.output_dir, "checkpoints"), **cfg.checkpoint.topk
@@ -363,6 +369,9 @@ class RobotWorkspace(BaseWorkspace):
             # json_logger.close()
             if wandb_run is not None:
                 wandb_run.finish()
+            if writer is not None:
+                for k, v in step_log.items():
+                    writer.add_scalar(f"train/{k}", v, self.global_step)
 
 
 class BatchSampler:
