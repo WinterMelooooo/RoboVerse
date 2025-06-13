@@ -1,10 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pointops
 Version: 1.0
-Summary: UNKNOWN
-Home-page: UNKNOWN
-License: UNKNOWN
-Platform: UNKNOWN
-
-UNKNOWN
-
+Requires-Dist: torch
+Requires-Dist: numpy
+Dynamic: requires-dist

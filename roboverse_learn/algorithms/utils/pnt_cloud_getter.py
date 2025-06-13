@@ -67,18 +67,24 @@ def point_cloud_sampling(point_cloud: np.ndarray, num_points: int, method: str =
 
     if method == "uniform":
         # uniform sampling
-        sampled_indices = np.random.choice(point_cloud.shape[0], num_points, replace=False)
+        sampled_indices = np.random.choice(
+            point_cloud.shape[0], num_points, replace=False
+        )
         point_cloud = point_cloud[sampled_indices]
     elif method == "fps":
         # fast point cloud sampling using torch3d
         point_cloud = torch.from_numpy(point_cloud).unsqueeze(0).cuda()
         num_points = torch.tensor([num_points]).cuda()
         # remember to only use coord to sample
-        _, sampled_indices = torch3d_ops.sample_farthest_points(points=point_cloud[..., :3], K=num_points)
+        _, sampled_indices = torch3d_ops.sample_farthest_points(
+            points=point_cloud[..., :3], K=num_points
+        )
         point_cloud = point_cloud.squeeze(0).cpu().numpy()
         point_cloud = point_cloud[sampled_indices.squeeze(0).cpu().numpy()]
     else:
-        raise NotImplementedError(f"point cloud sampling method {method} not implemented")
+        raise NotImplementedError(
+            f"point cloud sampling method {method} not implemented"
+        )
 
     return point_cloud
 
@@ -98,21 +104,31 @@ class PntCloudGetter:
             task_name = self._get_task_name(task_name)
         except:
             task_name = "CloseBox"
-            print(f"task_name not found, using default bounding box for task: {task_name}")
+            print(
+                f"task_name not found, using default bounding box for task: {task_name}"
+            )
         # point cloud cropping
         self.min_bound = self.env_cfg[task_name].get("min_bound", None)
         self.max_bound = self.env_cfg[task_name].get("max_bound", None)
         if self.min_bound is not None:
-            self.min_bound = np.array(self.min_bound) + np.array(BBOX_OFFSET_DIC[num_envs])
+            self.min_bound = np.array(self.min_bound) + np.array(
+                BBOX_OFFSET_DIC[num_envs]
+            )
         if self.max_bound is not None:
-            self.max_bound = np.array(self.max_bound) + np.array(BBOX_OFFSET_DIC[num_envs])
+            self.max_bound = np.array(self.max_bound) + np.array(
+                BBOX_OFFSET_DIC[num_envs]
+            )
 
         self.use_point_crop = use_point_crop
-        cprint(f"[MujocoPointcloudWrapper] use_point_crop: {self.use_point_crop}", "green")
+        cprint(
+            f"[MujocoPointcloudWrapper] use_point_crop: {self.use_point_crop}", "green"
+        )
 
         # point cloud sampling
         self.num_points = self.env_cfg[task_name].get("num_points", 512)
-        self.point_sampling_method = self.env_cfg[task_name].get("point_sampling_method", "uniform")
+        self.point_sampling_method = self.env_cfg[task_name].get(
+            "point_sampling_method", "uniform"
+        )
         cprint(
             f"[MujocoPointcloudWrapper] sampling {self.num_points} points from point cloud using {self.point_sampling_method}",
             "green",
@@ -122,14 +138,14 @@ class PntCloudGetter:
         )
 
         # point cloud generator
-        self.pc_generator = PointCloudGenerator(cam_names=self.env_cfg[task_name]["cam_names"])
+        self.pc_generator = PointCloudGenerator(
+            cam_names=self.env_cfg[task_name]["cam_names"]
+        )
         self.pc_transform = self.env_cfg[task_name].get("transform", None)
         self.pc_scale = self.env_cfg[task_name].get("scale", None)
         self.pc_offset = self.env_cfg[task_name].get("offset", None)
 
-    def get_point_cloud(
-        self, rgb, depth, cam_intr, cam_extr, use_RGB=True, segmentation_mask=None, segmentation_id=None
-    ):
+    def get_point_cloud(self, rgb, depth, cam_intr, cam_extr, use_RGB=True):
         # set save_img_dir to save images for debugging
         # save_img_dir = "/home/yanjieze/projects/diffusion-for-dex/imgs"
         save_img_dir = None
@@ -169,42 +185,6 @@ class PntCloudGetter:
             if not use_RGB:
                 point_cloud = point_cloud[:, :3]
 
-            if segmentation_mask is not None:
-                depth = depth.copy()
-                depth[segmentation_mask != segmentation_id] = 0
-                seg_point_cloud, seg_depth = self.pc_generator.generateCroppedPointCloud(
-                    rgb, depth, cam_intr, cam_extr, save_img_dir=save_img_dir, debug=DEBUG
-                )  # (N, 6), xyz+rgb
-                # if DEBUG:
-                #    print(
-                #        f"[({min(point_cloud[:, 0])}, {min(point_cloud[:, 1])}, {min(point_cloud[:, 2])}), ({max(point_cloud[:, 0])}, {max(point_cloud[:, 1])}, {max(point_cloud[:, 2])})]"
-                #    )
-                #    print(f"[{self.min_bound}, {self.max_bound}]")
-                # do transform, scale, offset, and crop
-                if self.pc_transform is not None:
-                    seg_point_cloud[:, :3] = seg_point_cloud[:, :3] @ self.pc_transform.T
-                if self.pc_scale is not None:
-                    seg_point_cloud[:, :3] = seg_point_cloud[:, :3] * self.pc_scale
-
-                if self.pc_offset is not None:
-                    seg_point_cloud[:, :3] = seg_point_cloud[:, :3] + self.pc_offset
-
-                if self.use_point_crop:
-                    if self.min_bound is not None:
-                        mask = np.all(seg_point_cloud[:, :3] > self.min_bound, axis=1)
-                        seg_point_cloud = seg_point_cloud[mask]
-                    if self.max_bound is not None:
-                        mask = np.all(seg_point_cloud[:, :3] < self.max_bound, axis=1)
-                        seg_point_cloud = seg_point_cloud[mask]
-
-                # sampling to fixed number of points
-                seg_point_cloud = point_cloud_sampling(
-                    point_cloud=seg_point_cloud,
-                    num_points=self.num_points,
-                    method=self.point_sampling_method,
-                )
-                point_cloud = np.concatenate([point_cloud, seg_point_cloud], axis=0)  # (N1+N2, 6), xyz+rgb
-
             device = getattr(rgb, "device", torch.device("cpu"))
             return torch.from_numpy(point_cloud).to(device).float()
 
@@ -213,19 +193,17 @@ class PntCloudGetter:
             pointcloud_batch = []
             for env in range(N_env):
                 single_rgb = rgb[env]
-                single_depth = np.ascontiguousarray(depth[env].cpu().numpy().astype(np.float32))
+                single_depth = np.ascontiguousarray(
+                    depth[env].cpu().numpy().astype(np.float32)
+                )
                 single_cam_intr = cam_intr[env]
                 single_cam_extr = cam_extr[env]
-                single_segementation_mask = segmentation_mask[env] if segmentation_mask is not None else None
-                single_segementation_id = segmentation_id[env] if segmentation_id is not None else None
                 point_cloud = self.get_point_cloud(
                     single_rgb,
                     single_depth,
                     single_cam_intr,
                     single_cam_extr,
                     use_RGB=use_RGB,
-                    segmentation_mask=single_segementation_mask,
-                    segmentation_id=single_segementation_id,
                 )
                 pointcloud_batch.append(point_cloud.cpu())
             pointcloud_batch = np.stack(pointcloud_batch, axis=0)
@@ -238,18 +216,6 @@ class PntCloudGetter:
         for key in self.env_cfg.keys():
             if key in task_name:
                 return key
-        raise NotImplementedError(f"task_name {task_name} not in self.env_cfg, only support: {self.env_cfg.keys()}")
-
-
-def get_segmentation_id(seg_id2label, task_name):
-    task2id = {"StackCube": "/World/envs/env_0/cube/geometry/mesh"}
-    for task in task2id.keys():
-        if task.lower() in task_name.lower() or task_name.lower() in task.lower():
-            obj_name = task2id[task]
-            for key, value in seg_id2label.items():
-                if obj_name == value:
-                    return key
-            raise ValueError(
-                f"segmentation id for {obj_name} not found in seg_id2label, available values: {seg_id2label.values()}"
-            )
-    raise NotImplementedError(f"task_name {task_name} not in task2id, only support: {task2id.keys()}")
+        raise NotImplementedError(
+            f"task_name {task_name} not in self.env_cfg, only support: {self.env_cfg.keys()}"
+        )

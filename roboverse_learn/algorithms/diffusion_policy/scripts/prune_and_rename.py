@@ -1,6 +1,8 @@
+import json
 import os
-import sys
 import shutil
+import sys
+
 
 def main():
     if len(sys.argv) != 2:
@@ -13,22 +15,27 @@ def main():
         sys.exit(1)
 
     # List subdirectories matching 'demo_XXXX'
-    subdirs = [d for d in os.listdir(root_dir)
-               if os.path.isdir(os.path.join(root_dir, d)) and d.startswith('demo_')]
+    subdirs = [
+        d
+        for d in os.listdir(root_dir)
+        if os.path.isdir(os.path.join(root_dir, d)) and d.startswith("demo_")
+    ]
     # Sort by numeric suffix
-    subdirs.sort(key=lambda x: int(x.split('_')[1]))
+    subdirs.sort(key=lambda x: int(x.split("_")[1]))
 
     valid_dirs = []
+    original_idxes = []
     # Identify and remove empty ones
     for d in subdirs:
         path = os.path.join(root_dir, d)
-        metadata_path = os.path.join(path, 'metadata.json')
+        metadata_path = os.path.join(path, "metadata.json")
         if not os.path.isfile(metadata_path):
             print(f"Removing empty folder: {d}")
             shutil.rmtree(path)
         else:
             valid_dirs.append(d)
-
+            original_idxes.append(d.split("_")[1])
+    mapping = {}
     # Renumber remaining directories
     for new_idx, old_name in enumerate(valid_dirs):
         new_name = f"demo_{new_idx:04d}"
@@ -37,6 +44,11 @@ def main():
             new_path = os.path.join(root_dir, new_name)
             print(f"Renaming {old_name} -> {new_name}")
             os.rename(old_path, new_path)
+        mapping[new_idx] = original_idxes[new_idx]
 
-if __name__ == '__main__':
+    json_path = os.path.join(root_dir, "mapping.json")
+    json.dump(mapping, open(json_path, "w"), indent=4)
+
+
+if __name__ == "__main__":
     main()

@@ -3,20 +3,28 @@ import math
 import os
 import pathlib
 import random
+import sys
 
 import hydra
 import numpy as np
 import torch
 import tqdm
 import wandb
-import sys
+
 sys.path.append(".")
 
 from diffusion_policy.common.checkpoint_util import TopKCheckpointManager
 from diffusion_policy.common.json_logger import JsonLogger
-from diffusion_policy.common.pytorch_util import dict_apply, optimizer_to, update_optimizer
+from diffusion_policy.common.pytorch_util import (
+    dict_apply,
+    optimizer_to,
+    update_optimizer,
+)
 from diffusion_policy.dataset.base_dataset import BaseImageDataset
-from diffusion_policy.model.common.lr_scheduler import get_composite_scheduler, get_scheduler
+from diffusion_policy.model.common.lr_scheduler import (
+    get_composite_scheduler,
+    get_scheduler,
+)
 from diffusion_policy.model.diffusion.ema_model import EMAModel
 from diffusion_policy.policy.diffusion_unet_image_policy import DiffusionUnetImagePolicy
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
@@ -28,6 +36,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
+
 class RobotWorkspace(BaseWorkspace):
     include_keys = ["global_step", "epoch"]
 
@@ -37,7 +46,9 @@ class RobotWorkspace(BaseWorkspace):
         self.local_rank = local_rank if local_rank is not None else 0
         self.world_size = world_size if world_size is not None else 1
         policy = cfg.optimizer.get("multigpu_lr_policy", None)
-        self.logger = cfg.logging.get("logger_name", "wandb")
+        OmegaConf.set_struct(cfg.logging, False)
+        self.logger = cfg.logging.pop("logger_name", "wandb")
+        OmegaConf.set_struct(cfg.logging, True)
         if not policy or policy == "sqrt":
             cfg.optimizer.lr = cfg.optimizer.lr * math.sqrt(self.world_size)
             if cfg.get("param_groups", None):
@@ -104,8 +115,12 @@ class RobotWorkspace(BaseWorkspace):
             val_dataset, **cfg.val_dataloader, multi_gpu=self.world_size > 1
         )
 
-        #warm_up_steps = cfg.training.lr_warmup_steps
-        warm_up_steps = cfg.training.lr_warmup_steps // self.world_size
+        # warm_up_steps = cfg.training.lr_warmup_steps
+        warm_up_steps = (
+            cfg.training.lr_warmup_steps // self.world_size
+            if cfg.training.consistent_warmup
+            else cfg.training.lr_warmup_steps
+        )
         self.lr_scheduler = get_composite_scheduler(
             cfg.training.lr_scheduler,
             optimizer=self.optimizer,
@@ -116,9 +131,9 @@ class RobotWorkspace(BaseWorkspace):
             # however huggingface diffusers steps it every batch
             last_epoch=self.global_step - 1,
             step_per_epoch=len(train_dataloader),
-            params_groups = cfg.get("param_groups", None)
+            params_groups=cfg.get("param_groups", None),
         )
-        #self.lr_scheduler = get_scheduler(
+        # self.lr_scheduler = get_scheduler(
         #    cfg.training.lr_scheduler,
         #    optimizer=self.optimizer,
         #    default_num_warmup_steps=warm_up_steps,
@@ -127,7 +142,7 @@ class RobotWorkspace(BaseWorkspace):
         #    # pytorch assumes stepping LRScheduler every epoch
         #    # however huggingface diffusers steps it every batch
         #    last_epoch=self.global_step - 1,
-        #)
+        # )
         lr_scheduler = self.lr_scheduler
         # resume training
         if cfg.training.resume:
@@ -254,7 +269,7 @@ class RobotWorkspace(BaseWorkspace):
                     "train_loss": raw_loss_cpu,
                     "global_step": self.global_step,
                     "epoch": self.epoch,
-                    #"lr": lr_scheduler.get_last_lr()[0],
+                    # "lr": lr_scheduler.get_last_lr()[0],
                 }
                 all_lrs = lr_scheduler.get_last_lr()
                 for pg, lr in zip(self.optimizer.param_groups, all_lrs):
@@ -310,9 +325,9 @@ class RobotWorkspace(BaseWorkspace):
                         batch = dataset.postprocess(batch, device)
                         loss = model.compute_loss(batch)
                         val_losses.append(loss)
-                        if (
-                            cfg.training.max_val_steps is not None
-                        ) and batch_idx >= (cfg.training.max_val_steps - 1):
+                        if (cfg.training.max_val_steps is not None) and batch_idx >= (
+                            cfg.training.max_val_steps - 1
+                        ):
                             break
                     if len(val_losses) > 0:
                         val_loss = torch.mean(torch.tensor(val_losses)).item()
@@ -347,7 +362,9 @@ class RobotWorkspace(BaseWorkspace):
                     del mse
 
             # checkpoint
-            if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0 or self.epoch + 1 == cfg.training.num_epochs:
+            if (
+                (self.epoch + 1) % cfg.training.checkpoint_every
+            ) == 0 or self.epoch + 1 == cfg.training.num_epochs:
                 # checkpointing
                 save_name = pathlib.Path(self.cfg.task.dataset.zarr_path).stem
                 self.save_checkpoint(

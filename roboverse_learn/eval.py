@@ -21,6 +21,8 @@ from rich.logging import RichHandler
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
+from PIL import Image
+
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors.cameras import PinholeCameraCfg
@@ -85,7 +87,7 @@ class Args:
 
 args = tyro.cli(Args)
 
-DEBUG_RGB = False
+DEBUG_RGB = True
 DEBUG_RAND_STATE = False
 DEBUG_PCD = True
 
@@ -135,7 +137,10 @@ def main():
         or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
     ):
         try:
-            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter, get_segmentation_id
+            from roboverse_learn.algorithms.utils.pnt_cloud_getter import (
+                PntCloudGetter,
+                get_segmentation_id,
+            )
 
         except:
             import sys
@@ -174,7 +179,10 @@ def main():
     if DEBUG_RAND_STATE:
         for state in init_states:
             print(state)
-        from roboverse_learn.algorithms.utils.random_state import compute_stats, plot_state_distributions_grid
+        from roboverse_learn.algorithms.utils.random_state import (
+            compute_stats,
+            plot_state_distributions_grid,
+        )
 
         stats_dict = compute_stats(init_states)
         import pprint
@@ -187,7 +195,10 @@ def main():
         log.info(
             f"task_id_range_low {args.task_id_range_high} is greater than the number of demos {num_demos}, assuming testing for OOD, generation random data!"
         )
-        from roboverse_learn.algorithms.utils.random_state import generate_random_states, state_stats
+        from roboverse_learn.algorithms.utils.random_state import (
+            generate_random_states,
+            state_stats,
+        )
 
         delta = args.task_id_range_high - num_demos
         stat_dict = state_stats[args.task]  # min, max, mean, std
@@ -208,19 +219,6 @@ def main():
         ## Reset before first step
         tic = time.time()
         obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])
-        if DEBUG_RGB:
-            save_dir = os.path.join("tmp/imgs", args.task)
-            for i in range(num_envs):
-                # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
-                img = np.array(obs.cameras["camera0"].rgb[i].cpu())
-                # 为每个 demo 创建子目录
-                demo_idx = demo_start_idx + i
-                demo_dir = save_dir
-                os.makedirs(demo_dir, exist_ok=True)
-                # 保存为 PNG
-                file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}.png")
-                iio.imwrite(file_path, img)
-            raise NotImplementedError()
 
         policyRunner.reset()
         toc = time.time()
@@ -251,21 +249,50 @@ def main():
                 depth = obs.cameras["camera0"].depth
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics
-                segmentation_mask = None
-                segmentation_id = None
-                if args.use_segmentation_mask:
-                    segmentation_mask = obs.cameras["camera0"].segmentation_mask
-                    segmentation_id = get_segmentation_id(obs.cameras["camera0"].instance_id_seg_id2label, args.task)
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(
-                    new_obs["rgb"], depth, cam_intr.cpu(), cam_extr.cpu(), segmentation_mask, segmentation_id
+                    new_obs["rgb"],
+                    depth,
+                    cam_intr.cpu(),
+                    cam_extr.cpu(),
                 )
+                if DEBUG_RGB:
+                    save_dir = f"./tmp/visualize/{args.task}L{args.random.level}"
+                    for i in range(num_envs):
+                        # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
+                        img = np.array(obs.cameras["camera0"].rgb[i].cpu())
+                        depth = np.array(obs.cameras["camera0"].depth[i].cpu())
+                        # 为每个 demo 创建子目录
+                        demo_idx = demo_start_idx + i
+                        demo_dir = save_dir
+                        os.makedirs(demo_dir, exist_ok=True)
+                        # 保存为 PNG
+                        file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}.png")
+                        iio.imwrite(file_path, img)
+                        depth_file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}_depth.png")
+
+                        # 假设 depth 是 numpy 数组，dtype 例如 float32 或 uint16
+                        depth_min, depth_max = depth.min(), depth.max()
+                        if depth_max > depth_min:
+                            depth_norm = (depth - depth_min) / (depth_max - depth_min)
+                        else:
+                            # 全零或常数图像
+                            depth_norm = np.zeros_like(depth)
+                        # 归一化到 0–255，再转 uint8
+                        depth_uint8 = (depth_norm * 255).astype(np.uint8)
+                        depth_uint8 = np.squeeze(depth_uint8)
+
+                        depth_img = Image.fromarray(depth_uint8, mode="L")
+                        depth_img.save(depth_file_path)
+                    # env.close()
+                    # raise NotImplementedError()
+
                 if DEBUG_PCD:
-                    save_folder = f"tmp/visualize/{args.task}L{args.random.level}"
+                    save_folder = f"./tmp/visualize/{args.task}L{args.random.level}"
                     os.makedirs(save_folder, exist_ok=True)
-                    for single_pcd in pnt_cloud:
-                        single_pcd = single_pcd.cpu().numpy()
+                    for idx, single_pcd in enumerate(pnt_cloud):
                         pcd_filename = os.path.join(save_folder, f"demo_{demo_start_idx:04d}_step_{step}.npy")
                         np.save(pcd_filename, single_pcd)
+                    env.close()
                     raise NotImplementedError("DEBUG")
 
                 new_obs["point_cloud"] = pnt_cloud

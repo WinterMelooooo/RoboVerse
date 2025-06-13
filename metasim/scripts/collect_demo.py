@@ -67,6 +67,8 @@ class Args:
     """Rollout unfinished trajectories"""
     run_failed: bool = False
     """Rollout unfinished and failed trajectories"""
+    target_num_demos: int = 100
+    """Target number of demos to collect, terminate when reached"""
 
     def __post_init__(self):
         assert self.run_all or self.run_unfinished or self.run_failed, (
@@ -201,9 +203,9 @@ class DemoCollector:
 
         save_demo(save_dir, self.cache[demo_idx])
 
-        ## Option 2: Save in a separate process, non-blocking, not friendly to KeyboardInterrupt, TODO: fix
-        ## TODO: see https://isaac-sim.github.io/IsaacLab/main/source/refs/troubleshooting.html#preventing-memory-leaks-in-the-simulator
-        # self.save_request_queue.put({"demo": self.cache[demo_idx], "save_dir": save_dir})
+    ## Option 2: Save in a separate process, non-blocking, not friendly to KeyboardInterrupt, TODO: fix
+    ## TODO: see https://isaac-sim.github.io/IsaacLab/main/source/refs/troubleshooting.html#preventing-memory-leaks-in-the-simulator
+    # self.save_request_queue.put({"demo": self.cache[demo_idx], "save_dir": save_dir})
 
     def mark_fail(self, demo_idx: int):
         assert demo_idx in self.cache
@@ -411,6 +413,10 @@ def main():
                 steps_after_success[env_id] = 0
                 collector.save(demo_idx)
                 collector.delete(demo_idx)
+                if tot_success > args.target_num_demos:
+                    log.info(f"Collected {tot_success} demos, reaching target {args.target_num_demos}, exiting")
+                    collector.final()
+                    env.close()
 
                 if demo_indexer.next_idx < max_demo:
                     ## NextDemo --> CollectingDemo
