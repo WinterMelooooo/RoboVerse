@@ -290,7 +290,7 @@ def main():
                     save_folder = f"./tmp/visualize/{args.task}L{args.random.level}"
                     os.makedirs(save_folder, exist_ok=True)
                     for idx, single_pcd in enumerate(pnt_cloud):
-                        pcd_filename = os.path.join(save_folder, f"demo_{demo_start_idx:04d}_step_{step}.npy")
+                        pcd_filename = os.path.join(save_folder, f"demo_{idx:04d}_step_{step}.npy")
                         np.save(pcd_filename, single_pcd)
                     env.close()
                     raise NotImplementedError("DEBUG")
