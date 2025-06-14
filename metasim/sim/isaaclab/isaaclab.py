@@ -174,6 +174,7 @@ class IsaaclabHandler(BaseSimHandler):
         _, _, _, time_out, extras = self.env.step(action_tensor_all)
         time_out = time_out.cpu()
         success = self.checker.check(self)
+        self.simulate()
         states = self.get_states()
 
         ## TODO: organize this
@@ -244,6 +245,7 @@ class IsaaclabHandler(BaseSimHandler):
 
         ## Update obs
         tic = time.time()
+        self.simulate()
         states = self.get_states()
         toc = time.time()
         log.trace(f"Reset getting obs time: {toc - tic:.2f}s")
