@@ -36,7 +36,7 @@ def save_demo_v2(save_dir: str, demo: list[EnvState]):
     robot_name = next(iter(demo[0]["robots"].keys()))
     # Get the main camera name (assuming first camera in first state)
     camera_name = next(iter(demo[0]["cameras"].keys()))
-
+    sensor_names = [name for name in demo[0]["sensors"].keys() if name not in demo[0]["cameras"].keys()]
     # Convert and prepare data for saving
     rgbs = []
     depths = []
@@ -54,13 +54,14 @@ def save_demo_v2(save_dir: str, demo: list[EnvState]):
         "robot_root_state": [],
         "robot_body_state": [],
     }
-
+    sensordata = {name: [] for name in sensor_names}
     # Process each timestep
     for i, state in enumerate(demo):
         # Extract robot state
         robot_state = state["robots"][robot_name]
         camera_state = state["cameras"][camera_name]
-
+        for name in sensordata.keys():
+            sensordata[name].append(state["sensors"][name]["force"].tolist())
         # Extract vision data
         if "rgb" in camera_state:
             rgb = camera_state["rgb"].cpu().numpy()
@@ -138,6 +139,7 @@ def save_demo_v2(save_dir: str, demo: list[EnvState]):
 
     # Save metadata
     json.dump(jsondata, open(os.path.join(save_dir, "metadata.json"), "w"))
+    json.dump(sensordata, open(os.path.join(save_dir, "sensordata.json"), "w"))
     pkl.dump(jsondata, open(os.path.join(save_dir, "metadata.pkl"), "wb"))
 
     # Mark as finished

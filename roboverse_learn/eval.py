@@ -75,8 +75,8 @@ class Args:
     """GPU ID to use"""
     wrapper_class: str | None = None
     """Env wrapper to use"""
-    use_segmentation_mask: bool = False
-    """Use segmentation mask in the observations"""
+    use_touch: bool = False
+    """Use touch sensor"""
 
     def __post_init__(self):
         if self.random.table and not self.table:
@@ -87,9 +87,9 @@ class Args:
 
 args = tyro.cli(Args)
 
-DEBUG_RGB = True
+DEBUG_RGB = False
 DEBUG_RAND_STATE = False
-DEBUG_PCD = True
+DEBUG_PCD = False
 
 
 def main():
@@ -137,11 +137,7 @@ def main():
         or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
     ):
         try:
-            from roboverse_learn.algorithms.utils.pnt_cloud_getter import (
-                PntCloudGetter,
-                get_segmentation_id,
-            )
-
+            from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
         except:
             import sys
 

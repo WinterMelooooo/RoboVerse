@@ -6,11 +6,4 @@ num_envs=50
 random_level=0
 task_id_range_low=0
 task_id_range_high=200
-use_segmentation_mask=0
-
-mask_arg=""
-if [ "${use_segmentation_mask}" -eq 1 ]; then
-  mask_arg="--use_segmentation_mask"
-fi
-
-python roboverse_learn/eval.py --task ${task} --algo diffusion_policy --max_step 500 --num_envs ${num_envs} --task_id_range_low ${task_id_range_low} --task_id_range_high ${task_id_range_high} --random.level ${random_level} --headless --checkpoint_path ${ckpt} ${mask_arg}
+python roboverse_learn/eval.py --task ${task} --algo diffusion_policy --max_step 500 --num_envs ${num_envs} --task_id_range_low ${task_id_range_low} --task_id_range_high ${task_id_range_high} --random.level ${random_level} --headless --checkpoint_path ${ckpt}

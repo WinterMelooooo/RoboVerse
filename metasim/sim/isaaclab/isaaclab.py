@@ -19,7 +19,13 @@ from metasim.cfg.sensors import ContactForceSensorCfg
 from metasim.sim import BaseSimHandler, EnvWrapper, IdentityEnvWrapper
 from metasim.types import Action, EnvState, Extra, Obs, Reward, Success, TimeOut
 from metasim.utils.dict import deep_get
-from metasim.utils.state import CameraState, ContactForceState, ObjectState, RobotState, TensorState
+from metasim.utils.state import (
+    CameraState,
+    ContactForceState,
+    ObjectState,
+    RobotState,
+    TensorState,
+)
 
 from .env_overwriter import IsaaclabEnvOverwriter
 from .isaaclab_helper import _update_tiled_camera_pose, get_pose
@@ -92,12 +98,20 @@ class IsaaclabHandler(BaseSimHandler):
         env_cfg.sim.render_interval = self.scenario.decimation
         env_cfg.scene.num_envs = self.num_envs
         env_cfg.decimation = self.scenario.decimation
-        env_cfg.episode_length_s = self.scenario.episode_length * env_cfg.sim.dt * self.scenario.decimation
+        env_cfg.episode_length_s = (
+            self.scenario.episode_length * env_cfg.sim.dt * self.scenario.decimation
+        )
 
         ## Physx settings
-        env_cfg.sim.physx.bounce_threshold_velocity = self.scenario.sim_params.bounce_threshold_velocity
-        env_cfg.sim.physx.friction_offset_threshold = self.scenario.sim_params.friction_offset_threshold
-        env_cfg.sim.physx.friction_correlation_distance = self.scenario.sim_params.friction_correlation_distance
+        env_cfg.sim.physx.bounce_threshold_velocity = (
+            self.scenario.sim_params.bounce_threshold_velocity
+        )
+        env_cfg.sim.physx.friction_offset_threshold = (
+            self.scenario.sim_params.friction_offset_threshold
+        )
+        env_cfg.sim.physx.friction_correlation_distance = (
+            self.scenario.sim_params.friction_correlation_distance
+        )
         env_cfg.sim.physx.solver_type = self.scenario.sim_params.solver_type
 
         self.env: EmptyEnv = gym.make("MetaSimEmptyTaskEnv", cfg=env_cfg)
@@ -124,13 +138,17 @@ class IsaaclabHandler(BaseSimHandler):
         log.info(f"Render mode: {settings.get_as_string('/rtx/rendermode')}")
         log.info(f"Render totalSpp: {settings.get('/rtx/pathtracing/totalSpp')}")
         log.info(f"Render spp: {settings.get('/rtx/pathtracing/spp')}")
-        log.info(f"Render adaptiveSampling/enabled: {settings.get('/rtx/pathtracing/adaptiveSampling/enabled')}")
+        log.info(
+            f"Render adaptiveSampling/enabled: {settings.get('/rtx/pathtracing/adaptiveSampling/enabled')}"
+        )
         log.info(f"Render maxBounces: {settings.get('/rtx/pathtracing/maxBounces')}")
 
     ############################################################
     ## Gymnasium main methods
     ############################################################
-    def step(self, action: list[Action] | torch.Tensor) -> tuple[Obs, Reward, Success, TimeOut, Extra]:
+    def step(
+        self, action: list[Action] | torch.Tensor
+    ) -> tuple[Obs, Reward, Success, TimeOut, Extra]:
         self._actions_cache = action
 
         if isinstance(action, torch.Tensor):
@@ -138,12 +156,17 @@ class IsaaclabHandler(BaseSimHandler):
         else:
             action_tensors = []
             for robot in self.robots:
-                actuator_names = [k for k, v in robot.actuators.items() if v.fully_actuated]
-                action_tensor = torch.zeros((self.num_envs, len(actuator_names)), device=self.env.device)
+                actuator_names = [
+                    k for k, v in robot.actuators.items() if v.fully_actuated
+                ]
+                action_tensor = torch.zeros(
+                    (self.num_envs, len(actuator_names)), device=self.env.device
+                )
                 for env_id in range(self.num_envs):
                     for i, actuator_name in enumerate(actuator_names):
                         action_tensor[env_id, i] = torch.tensor(
-                            action[env_id][robot.name]["dof_pos_target"][actuator_name], device=self.env.device
+                            action[env_id][robot.name]["dof_pos_target"][actuator_name],
+                            device=self.env.device,
                         )
                 action_tensors.append(action_tensor)
             action_tensor_all = torch.cat(action_tensors, dim=-1)
@@ -161,13 +184,23 @@ class IsaaclabHandler(BaseSimHandler):
                     rot = torch.zeros((self.num_envs, 4), device=self.device)
                     rot[:, 0] = 1.0
                 elif isinstance(obj.base_link, str):
-                    pos, rot = (states.objects | states.robots)[obj.base_link].root_state[:, :7].split([3, 4], dim=-1)
+                    pos, rot = (
+                        (states.objects | states.robots)[obj.base_link]
+                        .root_state[:, :7]
+                        .split([3, 4], dim=-1)
+                    )
                 else:
                     base_obj_name = obj.base_link[0]
                     base_body_name = obj.base_link[1]
                     merged_states = states.objects | states.robots
-                    body_idx = merged_states[base_obj_name].body_names.index(base_body_name)
-                    pos, rot = merged_states[base_obj_name].body_state[:, body_idx, :7].split([3, 4], dim=-1)
+                    body_idx = merged_states[base_obj_name].body_names.index(
+                        base_body_name
+                    )
+                    pos, rot = (
+                        merged_states[base_obj_name]
+                        .body_state[:, body_idx, :7]
+                        .split([3, 4], dim=-1)
+                    )
                 self._set_object_pose(obj, pos, rot)
 
         ## NOTE: Below is a workaround for IsaacLab bug. In IsaacLab v1.4.1-v2.1.0, the tiled camera pose data is never updated. The code is copied from `_update_poses` method in Camera class in `source/isaaclab/sensors/camera/camera.py` in IsaacLab v2.1.0.
@@ -257,12 +290,15 @@ class IsaaclabHandler(BaseSimHandler):
 
         pose = torch.concat(
             [
-                position.to(self.env.device, dtype=torch.float32) + self.env.scene.env_origins[env_ids],
+                position.to(self.env.device, dtype=torch.float32)
+                + self.env.scene.env_origins[env_ids],
                 rotation.to(self.env.device, dtype=torch.float32),
             ],
             dim=-1,
         )
-        obj_inst.write_root_pose_to_sim(pose, env_ids=torch.tensor(env_ids, device=self.env.device))
+        obj_inst.write_root_pose_to_sim(
+            pose, env_ids=torch.tensor(env_ids, device=self.env.device)
+        )
         obj_inst.write_root_velocity_to_sim(
             torch.zeros((len(env_ids), 6), device=self.env.device, dtype=torch.float32),
             env_ids=torch.tensor(env_ids, device=self.env.device),
@@ -281,48 +317,75 @@ class IsaaclabHandler(BaseSimHandler):
         pos = joint_pos.to(self.env.device)
         vel = torch.zeros_like(pos)
         obj_inst = self.env.scene.articulations[object.name]
-        obj_inst.write_joint_state_to_sim(pos, vel, env_ids=torch.tensor(env_ids, device=self.env.device))
+        obj_inst.write_joint_state_to_sim(
+            pos, vel, env_ids=torch.tensor(env_ids, device=self.env.device)
+        )
         obj_inst.write_data_to_sim()
 
-    def set_states(self, states: list[EnvState], env_ids: list[int] | None = None) -> None:
+    def set_states(
+        self, states: list[EnvState], env_ids: list[int] | None = None
+    ) -> None:
         if env_ids is None:
             env_ids = list(range(self.num_envs))
 
-        states_flat = [states[i]["objects"] | states[i]["robots"] for i in range(self.num_envs)]
+        states_flat = [
+            states[i]["objects"] | states[i]["robots"] for i in range(self.num_envs)
+        ]
         for obj in self.objects + self.robots + self.checker.get_debug_viewers():
             if obj.name not in states_flat[0]:
-                log.warning(f"Missing {obj.name} in states, setting its velocity to zero")
+                log.warning(
+                    f"Missing {obj.name} in states, setting its velocity to zero"
+                )
                 pos, rot = get_pose(self.env, obj.name, env_ids=env_ids)
                 self._set_object_pose(obj, pos, rot, env_ids=env_ids)
                 continue
 
-            if states_flat[0][obj.name].get("pos", None) is None or states_flat[0][obj.name].get("rot", None) is None:
-                log.warning(f"No pose found for {obj.name}, setting its velocity to zero")
+            if (
+                states_flat[0][obj.name].get("pos", None) is None
+                or states_flat[0][obj.name].get("rot", None) is None
+            ):
+                log.warning(
+                    f"No pose found for {obj.name}, setting its velocity to zero"
+                )
                 pos, rot = get_pose(self.env, obj.name, env_ids=env_ids)
                 self._set_object_pose(obj, pos, rot, env_ids=env_ids)
             else:
-                pos = torch.stack([states_flat[env_id][obj.name]["pos"] for env_id in env_ids]).to(self.env.device)
-                rot = torch.stack([states_flat[env_id][obj.name]["rot"] for env_id in env_ids]).to(self.env.device)
+                pos = torch.stack(
+                    [states_flat[env_id][obj.name]["pos"] for env_id in env_ids]
+                ).to(self.env.device)
+                rot = torch.stack(
+                    [states_flat[env_id][obj.name]["rot"] for env_id in env_ids]
+                ).to(self.env.device)
                 self._set_object_pose(obj, pos, rot, env_ids=env_ids)
 
             if isinstance(obj, ArticulationObjCfg):
                 if states_flat[0][obj.name].get("dof_pos", None) is None:
                     log.warning(f"No dof_pos found for {obj.name}")
                 else:
-                    dof_dict = [states_flat[env_id][obj.name]["dof_pos"] for env_id in env_ids]
+                    dof_dict = [
+                        states_flat[env_id][obj.name]["dof_pos"] for env_id in env_ids
+                    ]
                     joint_names = self.get_joint_names(obj.name, sort=False)
-                    joint_pos = torch.zeros((len(env_ids), len(joint_names)), device=self.env.device)
+                    joint_pos = torch.zeros(
+                        (len(env_ids), len(joint_names)), device=self.env.device
+                    )
                     for i, joint_name in enumerate(joint_names):
                         if joint_name in dof_dict[0]:
-                            joint_pos[:, i] = torch.tensor([x[joint_name] for x in dof_dict], device=self.env.device)
+                            joint_pos[:, i] = torch.tensor(
+                                [x[joint_name] for x in dof_dict],
+                                device=self.env.device,
+                            )
                         else:
-                            log.warning(f"Missing {joint_name} in {obj.name}, setting its position to zero")
+                            log.warning(
+                                f"Missing {joint_name} in {obj.name}, setting its position to zero"
+                            )
 
                     self._set_object_joint_pos(obj, joint_pos, env_ids=env_ids)
                     if obj in self.robots:
                         robot_inst = self.env.scene.articulations[obj.name]
                         robot_inst.set_joint_position_target(
-                            joint_pos, env_ids=torch.tensor(env_ids, device=self.env.device)
+                            joint_pos,
+                            env_ids=torch.tensor(env_ids, device=self.env.device),
                         )
                         robot_inst.write_data_to_sim()
 
@@ -386,10 +449,18 @@ class IsaaclabHandler(BaseSimHandler):
             camera_inst = self.env.scene.sensors[camera.name]
             rgb_data = camera_inst.data.output.get("rgb", None)
             depth_data = camera_inst.data.output.get("depth", None)
-            instance_seg_data = deep_get(camera_inst.data.output, "instance_segmentation_fast")
-            instance_seg_id2label = deep_get(camera_inst.data.info, "instance_segmentation_fast", "idToLabels")
-            instance_id_seg_data = deep_get(camera_inst.data.output, "instance_id_segmentation_fast")
-            instance_id_seg_id2label = deep_get(camera_inst.data.info, "instance_id_segmentation_fast", "idToLabels")
+            instance_seg_data = deep_get(
+                camera_inst.data.output, "instance_segmentation_fast"
+            )
+            instance_seg_id2label = deep_get(
+                camera_inst.data.info, "instance_segmentation_fast", "idToLabels"
+            )
+            instance_id_seg_data = deep_get(
+                camera_inst.data.output, "instance_id_segmentation_fast"
+            )
+            instance_id_seg_id2label = deep_get(
+                camera_inst.data.info, "instance_id_segmentation_fast", "idToLabels"
+            )
             if instance_seg_data is not None:
                 instance_seg_data = instance_seg_data.squeeze(-1)
             if instance_id_seg_data is not None:
@@ -403,12 +474,15 @@ class IsaaclabHandler(BaseSimHandler):
                 instance_id_seg_id2label=instance_id_seg_id2label,
                 pos=camera_inst.data.pos_w,
                 quat_world=camera_inst.data.quat_w_world,
-                intrinsics=torch.tensor(camera.intrinsics, device=self.device)[None, ...].repeat(self.num_envs, 1, 1),
+                intrinsics=torch.tensor(camera.intrinsics, device=self.device)[
+                    None, ...
+                ].repeat(self.num_envs, 1, 1),
             )
 
         sensor_states = {}
         for sensor in self.sensors:
             if isinstance(sensor, ContactForceSensorCfg):
+                print(f"sensors: {self.env.scene.sensors.keys()}")
                 sensor_inst = self.env.scene.sensors[sensor.name]
                 if sensor.source_link is None:
                     force = sensor_inst.data.net_forces_w.squeeze(1)
@@ -418,23 +492,34 @@ class IsaaclabHandler(BaseSimHandler):
             else:
                 raise ValueError(f"Unknown sensor type: {type(sensor)}")
 
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, sensors=sensor_states)
+        return TensorState(
+            objects=object_states,
+            robots=robot_states,
+            cameras=camera_states,
+            sensors=sensor_states,
+        )
 
-    def get_pos(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
+    def get_pos(
+        self, obj_name: str, env_ids: list[int] | None = None
+    ) -> torch.FloatTensor:
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         pos, _ = get_pose(self.env, obj_name, env_ids=env_ids)
         assert pos.shape == (len(env_ids), 3)
         return pos
 
-    def get_rot(self, obj_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
+    def get_rot(
+        self, obj_name: str, env_ids: list[int] | None = None
+    ) -> torch.FloatTensor:
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         _, rot = get_pose(self.env, obj_name, env_ids=env_ids)
         assert rot.shape == (len(env_ids), 4)
         return rot
 
-    def get_dof_pos(self, obj_name: str, joint_name: str, env_ids: list[int] | None = None) -> torch.FloatTensor:
+    def get_dof_pos(
+        self, obj_name: str, joint_name: str, env_ids: list[int] | None = None
+    ) -> torch.FloatTensor:
         if env_ids is None:
             env_ids = list(range(self.num_envs))
         dof_pos = torch.zeros(len(env_ids))
@@ -483,10 +568,16 @@ class IsaaclabHandler(BaseSimHandler):
         batch_joint_limits = joint_limits[:, joint_index, :]
         return batch_joint_limits
 
-    def set_camera_pose(self, position: tuple[float, float, float], look_at: tuple[float, float, float]) -> None:
+    def set_camera_pose(
+        self, position: tuple[float, float, float], look_at: tuple[float, float, float]
+    ) -> None:
         camera_inst = self.env.scene.sensors[self.cameras[0].name]
-        eyes = torch.tensor(position, dtype=torch.float32, device=self.env.device)[None, :]
-        targets = torch.tensor(look_at, dtype=torch.float32, device=self.env.device)[None, :]
+        eyes = torch.tensor(position, dtype=torch.float32, device=self.env.device)[
+            None, :
+        ]
+        targets = torch.tensor(look_at, dtype=torch.float32, device=self.env.device)[
+            None, :
+        ]
         eyes = eyes + self.env.scene.env_origins
         targets = targets + self.env.scene.env_origins
         camera_inst.set_world_poses_from_view(eyes=eyes, targets=targets)

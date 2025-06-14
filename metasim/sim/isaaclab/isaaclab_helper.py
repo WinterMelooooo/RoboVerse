@@ -14,7 +14,12 @@ from metasim.cfg.objects import (
     RigidObjCfg,
 )
 from metasim.cfg.robots import BaseRobotCfg
-from metasim.cfg.sensors import BaseCameraCfg, BaseSensorCfg, ContactForceSensorCfg, PinholeCameraCfg
+from metasim.cfg.sensors import (
+    BaseCameraCfg,
+    BaseSensorCfg,
+    ContactForceSensorCfg,
+    PinholeCameraCfg,
+)
 from metasim.utils.math import convert_camera_frame_orientation_convention
 
 try:
@@ -26,10 +31,20 @@ except:
 def _add_object(env: "EmptyEnv", obj: BaseObjCfg) -> None:
     try:
         import omni.isaac.lab.sim as sim_utils
-        from omni.isaac.lab.assets import Articulation, ArticulationCfg, RigidObject, RigidObjectCfg
+        from omni.isaac.lab.assets import (
+            Articulation,
+            ArticulationCfg,
+            RigidObject,
+            RigidObjectCfg,
+        )
     except ModuleNotFoundError:
         import isaaclab.sim as sim_utils
-        from isaaclab.assets import Articulation, ArticulationCfg, RigidObject, RigidObjectCfg
+        from isaaclab.assets import (
+            Articulation,
+            ArticulationCfg,
+            RigidObject,
+            RigidObjectCfg,
+        )
 
     assert isinstance(obj, BaseObjCfg)
     prim_path = f"/World/envs/env_.*/{obj.name}"
@@ -238,6 +253,8 @@ def _add_contact_force_sensor(env: "EmptyEnv", sensor: ContactForceSensorCfg) ->
         _base_prim_paths = prim_utils.find_matching_prim_paths(_base_prim_regex_path)
         if len(_base_prim_paths) == 0:
             log.error(f"Base link {sensor.base_link} of cotact force sensor not found")
+            all_prims = prim_utils.find_matching_prim_paths("/World/envs/env_0/.*")
+            log.error(f"Available prim paths under /World/envs/env_0:\n" + "\n".join(f"  - {p}" for p in all_prims))
             return
         if len(_base_prim_paths) > 1:
             log.warning(
@@ -324,7 +341,10 @@ def add_cameras(env: "EmptyEnv", cameras: list[BaseCameraCfg]) -> None:
 
 
 def get_pose(
-    env: "EmptyEnv", obj_name: str, obj_subpath: str | None = None, env_ids: list[int] | None = None
+    env: "EmptyEnv",
+    obj_name: str,
+    obj_subpath: str | None = None,
+    env_ids: list[int] | None = None,
 ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
     try:
         from omni.isaac.core.prims import RigidPrimView

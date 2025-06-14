@@ -1,15 +1,28 @@
 import torch
 from loguru import logger as log
 
-from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg
+from metasim.cfg.objects import (
+    ArticulationObjCfg,
+    PrimitiveCubeCfg,
+    PrimitiveSphereCfg,
+    RigidObjCfg,
+)
 from metasim.cfg.scenario import ScenarioCfg
 
-from .isaaclab_helper import add_cameras, add_lights, add_objects, add_robots, add_sensors, get_pose
+from .isaaclab_helper import (
+    add_cameras,
+    add_lights,
+    add_objects,
+    add_robots,
+    add_sensors,
+    get_pose,
+)
 
 try:
     from .empty_env import EmptyEnv
 except:
     pass
+from termcolor import cprint
 
 ## Constants
 
@@ -49,9 +62,13 @@ class IsaaclabEnvOverwriter:
             from .utils.usd_util import MdlRandomizer
 
             self.table_randomizer = MdlRandomizer(
-                "/World/envs/env_0/metasim_table", case="table", split=self.scenario.split
+                "/World/envs/env_0/metasim_table",
+                case="table",
+                split=self.scenario.split,
             )
-            self.ground_randomizer = MdlRandomizer("/World/ground", case="ground", split=self.scenario.split)
+            self.ground_randomizer = MdlRandomizer(
+                "/World/ground", case="ground", split=self.scenario.split
+            )
             self.wall_randomizer = MdlRandomizer(
                 "/World/envs/env_0/metasim_wall", case="wall", split=self.scenario.split
             )
@@ -70,11 +87,21 @@ class IsaaclabEnvOverwriter:
                 robot_pos, robot_quat = get_pose(env, self.robots[0].name)
                 robot_quat = robot_quat[0]  # FIXME: only support one environment
 
-                camera = randomize_camera_pose(camera, obj_pos.tolist(), robot_quat.tolist(), "front_select", self.task)
+                camera = randomize_camera_pose(
+                    camera,
+                    obj_pos.tolist(),
+                    robot_quat.tolist(),
+                    "front_select",
+                    self.task,
+                )
 
             if self.first_reset or self.scenario.random.camera:
-                eyes = torch.tensor(camera.pos, dtype=torch.float32, device=env.device)[None, :]
-                targets = torch.tensor(camera.look_at, dtype=torch.float32, device=env.device)[None, :]
+                eyes = torch.tensor(camera.pos, dtype=torch.float32, device=env.device)[
+                    None, :
+                ]
+                targets = torch.tensor(
+                    camera.look_at, dtype=torch.float32, device=env.device
+                )[None, :]
                 eyes = eyes + env.scene.env_origins
                 targets = targets + env.scene.env_origins
                 camera_inst = env.scene.sensors[camera.name]
@@ -93,7 +120,11 @@ class IsaaclabEnvOverwriter:
             self.wall_randomizer.do_it()
 
         ## Randomize table
-        if self.scenario.random.table and self.task.can_tabletop and self.scenario.try_add_table:
+        if (
+            self.scenario.random.table
+            and self.task.can_tabletop
+            and self.scenario.try_add_table
+        ):
             try:
                 from omni.isaac.core.prims import GeometryPrim
             except ModuleNotFoundError:
@@ -104,14 +135,19 @@ class IsaaclabEnvOverwriter:
             self.table_randomizer.do_it()
 
             for env_id in range(env.num_envs):
-                table_prim = GeometryPrim(f"/World/envs/env_{env_id}/metasim_table", name=f"table_prim_{env_id}")
+                table_prim = GeometryPrim(
+                    f"/World/envs/env_{env_id}/metasim_table",
+                    name=f"table_prim_{env_id}",
+                )
                 pos, _ = table_prim.get_world_pose()
                 theta = torch.rand(1) * 2 * torch.pi
-                rot_mat = torch.tensor([
-                    [torch.cos(theta), -torch.sin(theta), 0.0],
-                    [torch.sin(theta), torch.cos(theta), 0.0],
-                    [0.0, 0.0, 1.0],
-                ])
+                rot_mat = torch.tensor(
+                    [
+                        [torch.cos(theta), -torch.sin(theta), 0.0],
+                        [torch.sin(theta), torch.cos(theta), 0.0],
+                        [0.0, 0.0, 1.0],
+                    ]
+                )
                 quat = quat_from_matrix(rot_mat)
                 table_prim.set_world_pose(position=pos, orientation=quat)
 
@@ -121,7 +157,9 @@ class IsaaclabEnvOverwriter:
 
             for env_id in range(env.num_envs):
                 for obj in self.objects:
-                    if isinstance(obj, PrimitiveSphereCfg) or isinstance(obj, PrimitiveCubeCfg):
+                    if isinstance(obj, PrimitiveSphereCfg) or isinstance(
+                        obj, PrimitiveCubeCfg
+                    ):
                         continue
                     ReflectionRandomizer(f"/World/envs/env_{env_id}/{obj.name}").do_it()
 
@@ -149,20 +187,30 @@ class IsaaclabEnvOverwriter:
 
             for row in range(nrow):
                 for col in range(ncol):
-                    light_prim = prim_utils.get_prim_at_path(f"/World/envs/env_0/lights/light_{row}_{col}")
+                    light_prim = prim_utils.get_prim_at_path(
+                        f"/World/envs/env_0/lights/light_{row}_{col}"
+                    )
 
                     light_spacing = (1.0, 2.5 * light_length)
-                    light_prim.GetAttribute("xformOp:translate").Set((
-                        light_spacing[1] * (col - (ncol - 1) / 2),
-                        light_spacing[0] * (row - (nrow - 1) / 2),
-                        wall_height - (table_height + table_thickness) - wall_thickness,
-                    ))
-                    light_prim.GetAttribute("xformOp:orient").Set(Gf.Quatd(1.0, 0.0, 0.0, 0.0))
+                    light_prim.GetAttribute("xformOp:translate").Set(
+                        (
+                            light_spacing[1] * (col - (ncol - 1) / 2),
+                            light_spacing[0] * (row - (nrow - 1) / 2),
+                            wall_height
+                            - (table_height + table_thickness)
+                            - wall_thickness,
+                        )
+                    )
+                    light_prim.GetAttribute("xformOp:orient").Set(
+                        Gf.Quatd(1.0, 0.0, 0.0, 0.0)
+                    )
                     light_prim.GetAttribute("inputs:radius").Set(light_radius)
                     light_prim.GetAttribute("inputs:length").Set(light_length)
                     light_prim.GetAttribute("inputs:intensity").Set(light_intensity)
                     light_prim.GetAttribute("inputs:enableColorTemperature").Set(True)
-                    light_prim.GetAttribute("inputs:colorTemperature").Set(light_color_temperature)
+                    light_prim.GetAttribute("inputs:colorTemperature").Set(
+                        light_color_temperature
+                    )
 
         if self.first_reset:
             self.first_reset = False
@@ -175,7 +223,11 @@ class IsaaclabEnvOverwriter:
             from isaacsim.core.prims import SingleGeometryPrim as GeometryPrim
             from isaacsim.core.utils.stage import add_reference_to_stage
 
-        from .utils.ground_util import create_ground, set_ground_material, set_ground_material_scale
+        from .utils.ground_util import (
+            create_ground,
+            set_ground_material,
+            set_ground_material_scale,
+        )
         from .utils.usd_util import ReflectionRandomizer, ShaderFixer
 
         use_scene = False
@@ -205,7 +257,9 @@ class IsaaclabEnvOverwriter:
             use_scene = True
 
         add_robots(env, self.robots)
-        add_objects(env, self.objects + self.checker_debug_viewers[:1])  # TODO: now only support one checker viewer
+        add_objects(
+            env, self.objects + self.checker_debug_viewers[:1]
+        )  # TODO: now only support one checker viewer
         ## Fix shader texture map path
         for obj in self.objects:
             if isinstance(obj, RigidObjCfg) or isinstance(obj, ArticulationObjCfg):
@@ -218,7 +272,11 @@ class IsaaclabEnvOverwriter:
             create_ground()
 
         ## Add table
-        if self.task is not None and self.task.can_tabletop and self.scenario.try_add_table:
+        if (
+            self.task is not None
+            and self.task.can_tabletop
+            and self.scenario.try_add_table
+        ):
             try:
                 import omni.isaac.core.utils.prims as prim_utils
                 from omni.isaac.core.prims import GeometryPrim
@@ -231,7 +289,9 @@ class IsaaclabEnvOverwriter:
 
             ## Move ground down
             ground_prim = GeometryPrim(GROUND_PRIM_PATH, name="ground_prim")
-            ground_prim.set_world_pose(position=(0.0, 0.0, -table_height), orientation=(1.0, 0.0, 0.0, 0.0))
+            ground_prim.set_world_pose(
+                position=(0.0, 0.0, -table_height), orientation=(1.0, 0.0, 0.0, 0.0)
+            )
 
             ## Add table
             prim_utils.create_prim("/World/envs/env_0/metasim_table")
@@ -241,17 +301,21 @@ class IsaaclabEnvOverwriter:
                 scale=torch.tensor([table_size, table_size, table_thickness]),
                 position=torch.tensor([0.0, 0.0, -table_thickness / 2]),
             )
-            for i, (x, y) in enumerate([
-                (-table_size * 3 / 8, -table_size * 3 / 8),
-                (table_size * 3 / 8, -table_size * 3 / 8),
-                (-table_size * 3 / 8, table_size * 3 / 8),
-                (table_size * 3 / 8, table_size * 3 / 8),
-            ]):
+            for i, (x, y) in enumerate(
+                [
+                    (-table_size * 3 / 8, -table_size * 3 / 8),
+                    (table_size * 3 / 8, -table_size * 3 / 8),
+                    (-table_size * 3 / 8, table_size * 3 / 8),
+                    (table_size * 3 / 8, table_size * 3 / 8),
+                ]
+            ):
                 FixedCuboid(
                     prim_path=f"/World/envs/env_0/metasim_table/leg_{i}",
                     name=f"fixed_table_leg_{i}",
                     scale=torch.tensor([0.05, 0.05, table_height - table_thickness]),
-                    position=torch.tensor([x, y, -(table_height + table_thickness) / 2]),
+                    position=torch.tensor(
+                        [x, y, -(table_height + table_thickness) / 2]
+                    ),
                 )
         ## Add wall
         if self.scenario.random.wall:
@@ -264,17 +328,21 @@ class IsaaclabEnvOverwriter:
 
             prim_utils.create_prim("/World/envs/env_0/metasim_wall")
 
-            for i, (x, y, sx, sy) in enumerate([
-                (0, wall_dist, wall_dist * 2, wall_thickness),
-                (0, -wall_dist, wall_dist * 2, wall_thickness),
-                (wall_dist, 0, wall_thickness, wall_dist * 2),
-                (-wall_dist, 0, wall_thickness, wall_dist * 2),
-            ]):
+            for i, (x, y, sx, sy) in enumerate(
+                [
+                    (0, wall_dist, wall_dist * 2, wall_thickness),
+                    (0, -wall_dist, wall_dist * 2, wall_thickness),
+                    (wall_dist, 0, wall_thickness, wall_dist * 2),
+                    (-wall_dist, 0, wall_thickness, wall_dist * 2),
+                ]
+            ):
                 FixedCuboid(
                     f"/World/envs/env_0/metasim_wall/wall_{i}",
                     name=f"wall_{i}",
                     scale=torch.tensor([sx, sy, wall_height]),
-                    position=torch.tensor([x, y, wall_height / 2 - (table_height + table_thickness)]),
+                    position=torch.tensor(
+                        [x, y, wall_height / 2 - (table_height + table_thickness)]
+                    ),
                 )
 
             ## Add roof
@@ -283,11 +351,15 @@ class IsaaclabEnvOverwriter:
                     prim_path="/World/envs/env_0/metasim_wall/roof",
                     name="roof",
                     scale=torch.tensor([wall_dist * 2, wall_dist * 2, wall_thickness]),
-                    position=torch.tensor([
-                        0.0,
-                        0.0,
-                        wall_height + wall_thickness / 2 - (table_height + table_thickness),
-                    ]),
+                    position=torch.tensor(
+                        [
+                            0.0,
+                            0.0,
+                            wall_height
+                            + wall_thickness / 2
+                            - (table_height + table_thickness),
+                        ]
+                    ),
                 )
 
         ## Set default ground material
@@ -304,7 +376,9 @@ class IsaaclabEnvOverwriter:
         if self.scenario.random.reflection:
             for env_id in range(env.num_envs):
                 for obj in self.objects:
-                    if isinstance(obj, PrimitiveSphereCfg) or isinstance(obj, PrimitiveCubeCfg):
+                    if isinstance(obj, PrimitiveSphereCfg) or isinstance(
+                        obj, PrimitiveCubeCfg
+                    ):
                         continue
                     ReflectionRandomizer(f"/World/envs/env_{env_id}/{obj.name}").do_it()
 
@@ -342,10 +416,13 @@ class IsaaclabEnvOverwriter:
         start_idx = 0
         for robot, robot_inst in zip(self.robots, env.robots):
             actionable_joint_ids = [
-                robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
+                robot_inst.joint_names.index(jn)
+                for jn in robot.actuators
+                if robot.actuators[jn].fully_actuated
             ]
             robot_inst.set_joint_position_target(
-                env.actions[:, start_idx : start_idx + len(actionable_joint_ids)], joint_ids=actionable_joint_ids
+                env.actions[:, start_idx : start_idx + len(actionable_joint_ids)],
+                joint_ids=actionable_joint_ids,
             )
             start_idx += len(actionable_joint_ids)
 

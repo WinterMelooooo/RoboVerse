@@ -372,10 +372,17 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
                 "cam_intr": camera_state.intrinsics[env_id].cpu(),
             }
 
+        sensor_states = {}
+        for sensor_name, sensor_state in tensor_state.sensors.items():
+            sensor_states[sensor_name] = {
+                "force": sensor_state.force[env_id].cpu(),
+            }
+
         env_state = {
             "objects": object_states,
             "robots": robot_states,
             "cameras": camera_states,
+            "sensors": sensor_states,
         }
         env_states.append(env_state)
 
