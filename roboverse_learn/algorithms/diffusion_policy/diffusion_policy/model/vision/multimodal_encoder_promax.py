@@ -352,11 +352,14 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
                              use_independent_attention: bool = False,
                              use_modality_encoding: bool = False):
             self.cross_attn_rgb_pcd = nn.MultiheadAttention(embed_dim, num_heads)
+            self.cross_attn_vis_state = nn.MultiheadAttention(embed_dim, num_heads)
+
             self.use_independent_attention = use_independent_attention
             self.use_modality_encoding = use_modality_encoding
             self.n_tokens = len(self.img_keys) + len(self.point_cloud_keys) + len(self.low_dim_keys) + 2*len(self.sensor_state_keys)
             if use_independent_attention:
                 self.cross_attn_pcd_rgb = nn.MultiheadAttention(embed_dim, num_heads)
+                self.cross_attn_state_vis = nn.MultiheadAttention(embed_dim, num_heads)
             if use_modality_encoding:
                 self.modality_embed = nn.Embedding(self.n_tokens, embed_dim)  # 3+n+1 modalities: img, pc, state, n sensor(present + predict), fused
 
@@ -378,10 +381,9 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
             elif self.name_secondary_fusion_func == "mean_pool_atten":
                 from .models import AttentionPoolingHead
                 self.pool =  AttentionPoolingHead(num_tokens=self.n_tokens)
-                self.cross_attn_vis_state = nn.MultiheadAttention(embed_dim, num_heads)
-                if use_independent_attention:
-                    self.cross_attn_state_vis = nn.MultiheadAttention(embed_dim, num_heads)
-
+                self.fusion_atten_pred = nn.MultiheadAttention(embed_dim, num_heads)
+                if self.use_independent_attention:
+                    self.pred_atten_fusion = nn.MultiheadAttention(embed_dim, num_heads)
             else:
                 raise ValueError(f"Unknown secondary fusion function: {self.secondary_fusion_func}")
             return self._primary_cross_attention_features, self._secondary_cross_attention_features
@@ -449,11 +451,11 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
             return feat
 
         elif self.name_secondary_fusion_func == "mean_pool_atten":
-            fused_attn_output, attn_map = self.cross_attn_vis_state(fused_feats, pred_sensor_feats, pred_sensor_feats)
+            fused_attn_output, attn_map = self.fusion_atten_pred(fused_feats, pred_sensor_feats, pred_sensor_feats)
             if self.use_independent_attention:
-                state_attn_output, attn_map = self.cross_attn_state_vis(pred_sensor_feats, fused_feats, fused_feats)
+                state_attn_output, attn_map = self.pred_atten_fusion(pred_sensor_feats, fused_feats, fused_feats)
             else:
-                state_attn_output, attn_map = self.cross_attn_vis_state(pred_sensor_feats, fused_feats, fused_feats)
+                state_attn_output, attn_map = self.fusion_atten_pred(pred_sensor_feats, fused_feats, fused_feats)
             if self.use_residual:
                 fused_attn_output = fused_attn_output + fused_feats
                 state_attn_output = state_attn_output + pred_sensor_feats
