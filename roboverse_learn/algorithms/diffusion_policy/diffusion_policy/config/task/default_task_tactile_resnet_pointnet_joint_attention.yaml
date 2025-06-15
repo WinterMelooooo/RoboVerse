@@ -1,0 +1,34 @@
+name: task_config
+
+image_shape: &image_shape [3, 256, 256]
+shape_meta: &shape_meta
+  # acceptable types: rgb, low_dim
+  obs:
+    head_cam:
+      shape: *image_shape
+      type: rgb
+    agent_pos:
+      shape: [9]
+      type: low_dim
+    point_cloud:
+      shape: [4096, 3]
+      type: point_cloud
+    franka_panda_leftfinger_touch_sensor:
+      shape: [3]
+      type: force
+    franka_panda_rightfinger_touch_sensor:
+      shape: [3]
+      type: force
+  action:
+    shape: [9]
+
+dataset:
+  _target_: diffusion_policy.dataset.robot_multimodal_dataset_pro.MultiModalDatasetPro
+  zarr_path: diffusion_policy/data/useless.zarr
+  horizon: ${horizon}
+  pad_before: ${eval:'${n_obs_steps}-1'}
+  pad_after: ${eval:'${n_action_steps}-1'}
+  seed: 42
+  val_ratio: 0.02
+  batch_size: 128
+  max_train_episodes: null

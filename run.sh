@@ -1,7 +1,7 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=CloseBox
-level=2
-config_name=robot_dp_tactile_resnet_pointnet_mutual_attention
+level=0
+config_name=robot_dp_tactile_resnet_pointnet_joint_attention
 num_epochs=2000
 port=50061
 norm_pnt_cloud=0
