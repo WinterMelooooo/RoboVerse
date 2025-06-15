@@ -181,6 +181,16 @@ def get_prediction_mlp(**kawrgs):
         sys.path.append(".")
         from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.sensor_prediction_mlp import SensorPredictor
     return SensorPredictor(**kawrgs)
+
+def get_prediction_transformer(**kawrgs):
+    try:
+        from .sensor_prediction_mlp import TransSensorPredictor
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.sensor_prediction_mlp import TransSensorPredictor
+    return TransSensorPredictor(**kawrgs)
+
 def get_state_mlp(observation_space: Dict,
                   state_mlp_size=(64, 64),
                   state_mlp_activation_fn=nn.ReLU,):
