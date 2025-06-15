@@ -121,6 +121,10 @@ class RobotWorkspace(BaseWorkspace):
             if cfg.training.consistent_warmup
             else cfg.training.lr_warmup_steps
         )
+
+        if cfg.training.get("sensor_gt_ratio", None) is not None:
+            self.gt_before_epoch = cfg.training.sensor_gt_ratio * cfg.training.num_epochs
+
         self.lr_scheduler = get_composite_scheduler(
             cfg.training.lr_scheduler,
             optimizer=self.optimizer,
@@ -246,7 +250,10 @@ class RobotWorkspace(BaseWorkspace):
 
                 # pprint(batch)
                 # compute loss
-                raw_loss = model.compute_loss(batch)
+                if hasattr(self, "gt_before_epoch"):
+                    raw_loss = model.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
+                else:
+                    raw_loss = model.compute_loss(batch)
                 loss = raw_loss / cfg.training.gradient_accumulate_every
                 loss.backward()
 
@@ -323,7 +330,10 @@ class RobotWorkspace(BaseWorkspace):
                         tepoch = val_dataloader
                     for batch_idx, batch in enumerate(tepoch):
                         batch = dataset.postprocess(batch, device)
-                        loss = model.compute_loss(batch)
+                        if hasattr(self, "gt_before_epoch"):
+                            loss = model.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
+                        else:
+                            loss = model.compute_loss(batch)
                         val_losses.append(loss)
                         if (cfg.training.max_val_steps is not None) and batch_idx >= (
                             cfg.training.max_val_steps - 1
@@ -349,8 +359,10 @@ class RobotWorkspace(BaseWorkspace):
                     # from pprint import pprint
                     # pprint(obs_dict)
                     gt_action = batch["action"]
-
-                    result = policy.predict_action(obs_dict)
+                    if hasattr(self, "gt_before_epoch"):
+                        result = policy.predict_action(obs_dict, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
+                    else:
+                        result = policy.predict_action(obs_dict)
                     pred_action = result["action_pred"]
                     mse = torch.nn.functional.mse_loss(pred_action, gt_action)
                     step_log["train_action_mse_error"] = mse.item()

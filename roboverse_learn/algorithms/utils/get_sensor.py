@@ -3,7 +3,17 @@ from metasim.cfg.sensors import ContactForceSensorCfg
 Task_2_Desired_Object = {
     "PickCube": "cube",
     "StackCube": "cube",
-    "CloseBox": ("box_base", "box_lid")
+    "CloseBox": ("box_base", "box_lid"),
+    "LiberoPickAlphabetSoup": None,
+    "LiberoPickBbqSauce": None,
+    "LiberoPickButter": None,
+    "LiberoPickChocolatePudding": None,
+    "LiberoPickCreamCheese": None,
+    "LiberoPickKetchup": None,
+    "LiberoPickMilk": None,
+    "LiberoPickOrangeJuice": None,
+    "LiberoPickSaladDressing": None,
+    "LiberoPickTomatoSauce": None,
 }
 
 
@@ -31,7 +41,7 @@ def get_robot_links(robot_name):
 def get_desired_object(task_name, task_cfg):
     objs = task_cfg.objects
     desired_object_name = Task_2_Desired_Object[task_name]
-    if isinstance(desired_object_name, tuple):
+    if isinstance(desired_object_name, tuple) or desired_object_name is None:
         return desired_object_name
     filter_objs = [obj for obj in objs if obj.name == desired_object_name]
     assert len(filter_objs) == 1, f"Expected one object with name {desired_object_name}, but found {len(filter_objs)}."

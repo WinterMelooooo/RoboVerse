@@ -452,7 +452,7 @@ def main():
                 steps_after_success[env_id] = 0
                 collector.save(demo_idx)
                 collector.delete(demo_idx)
-                if tot_success > args.target_num_demos:
+                if tot_success >= args.target_num_demos:
                     log.info(
                         f"Collected {tot_success} demos, reaching target {args.target_num_demos}, exiting"
                     )

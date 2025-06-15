@@ -54,14 +54,23 @@ def save_demo_v2(save_dir: str, demo: list[EnvState]):
         "robot_root_state": [],
         "robot_body_state": [],
     }
-    sensordata = {name: [] for name in sensor_names}
+    sensordata = {
+        "sensor_dict":{name: [] for name in sensor_names},
+        "sensor_dict_target": {name: [] for name in sensor_names},
+    }
     # Process each timestep
     for i, state in enumerate(demo):
         # Extract robot state
         robot_state = state["robots"][robot_name]
         camera_state = state["cameras"][camera_name]
-        for name in sensordata.keys():
-            sensordata[name].append(state["sensors"][name]["force"].tolist())
+        for name in sensordata["sensor_dict"].keys():
+            sensor_state = state["sensors"][name]["force"].tolist()
+            sensordata["sensor_dict"][name].append(sensor_state)
+            if i < len(demo) - 1:
+                next_sensor_state = demo[i + 1]["sensors"][name]["force"].tolist()
+                sensordata["sensor_dict_target"][name].append(next_sensor_state)
+            else:
+                sensordata["sensor_dict_target"][name].append(sensor_state)
         # Extract vision data
         if "rgb" in camera_state:
             rgb = camera_state["rgb"].cpu().numpy()

@@ -484,7 +484,6 @@ class IsaaclabHandler(BaseSimHandler):
         sensor_states = {}
         for sensor in self.sensors:
             if isinstance(sensor, ContactForceSensorCfg):
-                print(f"sensors: {self.env.scene.sensors.keys()}")
                 sensor_inst = self.env.scene.sensors[sensor.name]
                 if sensor.source_link is None:
                     force = sensor_inst.data.net_forces_w.squeeze(1)

@@ -60,12 +60,19 @@ def main():
     head_cams = root["data"]["head_camera"]
     depths = root["data"]["head_camera_depth"]
     pnt_clouds = root["data"]["head_camera_pnt_cloud"]
+    sensors_group = root["data"]["sensors"]
+    sensor_names = list(sensors_group.array_keys())   # 或者 keys()
     episode_ends = root["meta"]["episode_ends"]
 
     print(f"len(head_cams): {len(head_cams)}")
     print(f"len(depths): {len(depths)}")
     print(f"len(pnt_clouds): {len(pnt_clouds)}")
     print(f"len(episode_ends): {len(episode_ends)}")
+    for name in sensor_names:
+        dataset = sensors_group[name]      # 这是一个 zarr.core.Array
+        print(name, "has", len(dataset), "entries")
+        print(f"last data: {dataset[-1]}")
+        print(f"last second data: {dataset[-2]}")
 
     head_cam_exp = head_cams[0]
     depth_exp = depths[0]

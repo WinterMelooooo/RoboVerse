@@ -173,7 +173,11 @@ class ReplayBuffer:
             data = dict()
             for key in keys:
                 arr = src_root["data"][key]
-                data[key] = arr[:]
+                if isinstance(arr, zarr.Group):
+                    for subkey, subvalue in arr.items():
+                        data[f"{key}/{subkey}"] = subvalue[:]
+                else:
+                    data[key] = arr[:]
 
             root = {"meta": meta, "data": data}
         else:

@@ -9,21 +9,12 @@
 metadata_dir=${1}
 task_name=${2}
 expert_data_num=${3}
-gpu_ids=${4}
-num_epochs=${5}
-obs_space=${6} # joint_pos or ee
-act_space=${7} # joint_pos or ee
-delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 means delta control )
-store_rgbd=${9:-0} # 0 or 1
-store_pnt_cloud=${10:-0} # 0 or 1
-tag="${11:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${12:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+obs_space=${4} # joint_pos or ee
+act_space=${5} # joint_pos or ee
+delta_ee=${6:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 means delta control )
+store_rgbd=${7:-0} # 0 or 1
+store_pnt_cloud=${8:-0} # 0 or 1
 
-
-horizon=8
-n_obs_steps=3
-n_action_steps=4
-seed=42
 
 # adding the obs and action space as additional info
 extra="obs:${obs_space}_act:${act_space}"

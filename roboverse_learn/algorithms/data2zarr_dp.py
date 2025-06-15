@@ -97,6 +97,19 @@ def main():
     save_dir = f"data_policy/{task_name}_{num}.zarr"
     print("ZARR save dir:", save_dir)
 
+    demo_dir = os.path.join(load_dir, f"demo_{0:04d}")
+    find_sensordata = False
+    if "sensordata.json" in os.listdir(demo_dir):
+        logging.info(
+            "Detected sensordata.json files. Saving sensordata to ZARR"
+        )
+        demo_sensordata = json.load(
+            open(os.path.join(demo_dir, "sensordata.json"), encoding="utf-8")
+        )
+        names = list(demo_sensordata["sensor_dict_target"].keys())
+        sensor_arrays_dict = { name: [] for name in names }
+        find_sensordata = True
+
     if os.path.exists(save_dir):
         shutil.rmtree(save_dir)
 
@@ -143,6 +156,9 @@ def main():
         with open(os.path.join(demo_dir, "metadata.json"), encoding="utf-8") as f:
             # print("metadata load dir:", demo_dir)
             metadata = json.load(f)
+        if find_sensordata:
+            with open(os.path.join(demo_dir, "sensordata.json"), encoding="utf-8") as f:
+                sensordata = json.load(f)
         data_length = len(metadata["joint_qpos"])
         rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"))
         if args.store_rgbd:
@@ -150,6 +166,11 @@ def main():
         for i, rgb in enumerate(rgbs):
             if i % downsample_ratio != 0:
                 continue
+            # sensors
+            if find_sensordata:
+                sensor_states = sensordata["sensor_dict_target"]
+                for name in sensor_states.keys():
+                    sensor_arrays_dict[name].append(sensor_states[name][i])
 
             # you can change state and action here
             if args.observation_space == "joint_pos":
@@ -267,6 +288,9 @@ def main():
             action_arrays = np.array(action_arrays)
             state_arrays = np.array(state_arrays)
             episode_ends_arrays = np.array(episode_ends_arrays)
+            if find_sensordata:
+                for name in sensor_arrays_dict.keys():
+                    sensor_arrays_dict[name] = np.array(sensor_arrays_dict[name])
 
             # Create datasets dynamically during the first write
             if current_batch == 0:
@@ -312,6 +336,17 @@ def main():
                         compressor=compressor,
                         overwrite=True,
                     )
+                if find_sensordata:
+                    sensors_group = zarr_data.create_group("sensors")
+                    for name in sensor_arrays_dict.keys():
+                        sensors_group.create_dataset(
+                            name,
+                            shape=(0, sensor_arrays_dict[name].shape[1]),
+                            chunks=(batch_size, sensor_arrays_dict[name].shape[1]),
+                            dtype=sensor_arrays_dict[name].dtype,
+                            compressor=compressor,
+                            overwrite=True,
+                        )
                 zarr_meta.create_dataset(
                     "episode_ends",
                     shape=(0,),
@@ -330,6 +365,9 @@ def main():
                 zarr_data["head_camera_depth"].append(head_camera_depth_arrays)
             if args.store_pnt_cloud:
                 zarr_data["head_camera_pnt_cloud"].append(head_camera_pnt_cloud_arrays)
+            if find_sensordata:
+                for name in sensor_arrays_dict.keys():
+                    zarr_data["sensors"][name].append(sensor_arrays_dict[name])
 
             print(f"Batch {current_batch + 1} written with {len(head_camera_arrays)} samples.")
 
@@ -342,6 +380,9 @@ def main():
                 head_camera_depth_arrays = []
             if args.store_pnt_cloud:
                 head_camera_pnt_cloud_arrays = []
+            if find_sensordata:
+                for name in sensor_arrays_dict.keys():
+                    sensor_arrays_dict[name] = []
             current_batch += 1
 
     # Save metadata to a JSON file

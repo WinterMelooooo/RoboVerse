@@ -1,7 +1,7 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export CUDA_VISIBLE_DEVICES=4
-ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.06.12/13.03.09_Fusion_ResNet18_PointNet_Joint_Attention_StackCubeFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
-task=StackCube
+export CUDA_VISIBLE_DEVICES=6
+ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.06.12/13.07.07_Fusion_ResNet18_PointNet_Joint_Attention_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
+task=CloseBox
 num_envs=50
 random_level=0
 task_id_range_low=0

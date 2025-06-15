@@ -173,10 +173,33 @@ def get_spUnet_encoder(**kwargs):
     return SpUnetEncoder(**kwargs)
 
 
+def get_prediction_mlp(**kawrgs):
+    try:
+        from .sensor_prediction_mlp import SensorPredictor
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.sensor_prediction_mlp import SensorPredictor
+    return SensorPredictor(**kawrgs)
 def get_state_mlp(observation_space: Dict,
                   state_mlp_size=(64, 64),
                   state_mlp_activation_fn=nn.ReLU,):
         state_key = 'agent_pos'
+        state_shape = observation_space[state_key]["shape"]
+        if len(state_mlp_size) == 0:
+            raise RuntimeError(f"State mlp size is empty")
+        elif len(state_mlp_size) == 1:
+            net_arch = []
+        else:
+            net_arch = state_mlp_size[:-1]
+        output_dim = state_mlp_size[-1]
+        state_mlp = nn.Sequential(*create_mlp(state_shape[0], output_dim, net_arch, state_mlp_activation_fn))
+        return state_mlp
+
+def get_sensor_mlp(observation_space: Dict,
+                  state_mlp_size=(64, 64),
+                  state_mlp_activation_fn=nn.ReLU,):
+        state_key = 'franka_panda_leftfinger_touch_sensor'
         state_shape = observation_space[state_key]["shape"]
         if len(state_mlp_size) == 0:
             raise RuntimeError(f"State mlp size is empty")
