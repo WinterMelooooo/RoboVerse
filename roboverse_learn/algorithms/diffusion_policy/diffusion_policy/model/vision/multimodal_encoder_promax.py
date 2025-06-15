@@ -446,7 +446,7 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
             fused = torch.cat([fused_feats, pred_sensor_feats], dim=0)  # [N1+N2+N3+N4+N4, B, embed_dim]
             B, D = fused.shape[-2:]
             cls = self.cls_token.expand(1, B, D)
-            feat = self.cross_attn_cls_fuse(cls, fused, fused) # [1, B, embed_dim]
+            feat, _ = self.cross_attn_cls_fuse(cls, fused, fused) # [1, B, embed_dim]
             feat = feat.squeeze(0)  # [B, embed_dim]
             return feat
 

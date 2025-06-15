@@ -1,12 +1,12 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-task_name=StackBox
+task_name=StackCube
 level=0
-config_name=robot_dp_tactile_resnet_pointnet_token_attention_cls
+config_name=robot_dp_tactile_resnet_pointnet_token_attention_pool
 num_epochs=2000
-port=50065
+port=50066
 norm_pnt_cloud=0
 seed=42
-gpus=0,1,2,3,4,5,6,7
+gpus=4,5,6,7
 strategy=sqrt
 train_ratio=100
 logger=wandb
