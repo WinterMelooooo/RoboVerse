@@ -69,7 +69,7 @@ policy:
       _target_: diffusion_policy.model.vision.model_getter.get_sensor_mlp
       observation_space: ${shape_meta.obs}
     prediction_model:
-      _target_: diffusion_policy.model.vision.model_getter.get_prediction_mlp
+      _target_: diffusion_policy.model.vision.model_getter.get_prediction_mlp_with_attention
       input_dim: ${policy.obs_encoder.fusion_args.embed_dim}
       output_dim: ${shape_meta.obs.franka_panda_leftfinger_touch_sensor_pred.shape[0]}
       hidden_dim: 64

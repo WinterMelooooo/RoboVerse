@@ -182,6 +182,15 @@ def get_prediction_mlp(**kawrgs):
         from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.sensor_prediction_mlp import SensorPredictor
     return SensorPredictor(**kawrgs)
 
+def get_prediction_mlp_with_attention(**kawrgs):
+    try:
+        from .sensor_prediction_mlp import SensorPredictorCLS
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.sensor_prediction_mlp import SensorPredictorCLS
+    return SensorPredictorCLS(**kawrgs)
+
 def get_prediction_transformer(**kawrgs):
     try:
         from .sensor_prediction_mlp import TransSensorPredictor
