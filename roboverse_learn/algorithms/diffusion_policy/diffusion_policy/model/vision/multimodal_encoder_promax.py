@@ -159,9 +159,10 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
         self.to(device)
         self.cuda_device = device
 
-
     def forward(self, obs_dict, use_gt_sensor):
         for key in self.sensor_state_keys:
+            if not use_gt_sensor and key.endswith("_pred"):
+                continue
             if key not in obs_dict:
                 raise ValueError(f"Key {key} not found in obs_dict. Available keys: {obs_dict.keys()}")
         batch_size = None
@@ -218,16 +219,15 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
             feature = self.key_model_map[key](pnt_cloud[..., :3])  # assuming the first 3 dimensions are x, y, z
             pntcloud_features.append(feature.to(device))
 
-
         for key in self.sensor_state_keys:
             if key.endswith("_pres"):
-                pres_sensor_state = obs_dict[key]
+                pres_sensor_state = obs_dict[key] # [B, D0]
                 if batch_size is None:
                     batch_size = pres_sensor_state.shape[0]
                 else:
                     assert batch_size == pres_sensor_state.shape[0]
                 assert pres_sensor_state.shape[1:] == self.key_shape_map[key]
-                pres_sensor_state = self.key_transform_map[key](pres_sensor_state)
+                pres_sensor_state = self.key_transform_map[key](pres_sensor_state) #[B, D0]
                 feature = self.key_model_map[key](pres_sensor_state) #[B, D]
                 pres_sensor_state_features.append(feature.to(device)) #[N, B, D]
                 # print(f"{key}: {features[-1].device}")

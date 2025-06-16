@@ -1,10 +1,10 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export CUDA_VISIBLE_DEVICES=6
-ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.06.14/23.28.47_Fusion_Tactile_ResNet18_PointNet_Mutual_Attention_CloseBoxFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
+export CUDA_VISIBLE_DEVICES=3
+ckpt=/home/ghr/yktang/RoboVerse/info/outputs/DP/2025.06.15/19.14.33_Fusion_Tactile_ResNet18_PointNet_Token_Attention_CLS_CloseBoxFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
 task=CloseBox
-use_touch=0
 num_envs=1
 random_level=2
+use_touch=1
 task_id_range_low=0
 task_id_range_high=200
 

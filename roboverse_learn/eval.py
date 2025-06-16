@@ -234,7 +234,6 @@ def main():
         SuccessOnce = [False] * num_envs
         TimeOut = [False] * num_envs
         images_list = []
-        print(policyRunner.policy_cfg)
         while step < MaxStep:
             log.debug(f"Step {step}")
             new_obs = {
@@ -306,16 +305,9 @@ def main():
                     new_obs["point_cloud"] = new_obs["point_cloud"][..., :feat_dim]
 
             if (
-                "franka_panda_leftfinger_touch_sensor" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+                "franka_panda_leftfinger_touch_sensor_pred" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
             ):
-
-                print(type(obs))
-                print(obs.keys())
-                for sensor_name, sensor_data in obs.sensors.items():
-                    new_obs[sensor_name] = sensor_data
-                    print(f"sensor_name: {sensor_name}\nsensor_data: {sensor_data.shape}")
-                env.close()
-                raise NotImplementedError()
+                new_obs["sensors"] = obs.sensors # {sensor_name: {"force": Tensor[N_env, 3]}}
 
             images_list.append(np.array(new_obs["rgb"].cpu()))
             # for key, value in new_obs.items():

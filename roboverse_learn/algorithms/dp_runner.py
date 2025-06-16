@@ -214,4 +214,13 @@ class DPRunner(PolicyRunner):
             # new_obs_dict["pcds"] = torch.stack(new_obs_dict["pcds"], dim=0) # (N_env, Dict)
             obs_dict = new_obs_dict
 
+        if (
+            "franka_panda_leftfinger_touch_sensor_pres" in self.yaml_cfg.task.shape_meta.obs.keys()
+        ):
+            #print(f"type obs:{type(obs)}")
+            #import pprint
+            #pprint.pprint(obs)
+            for sensor_name, sensor_state in obs["sensors"].items():
+                obs_dict[sensor_name+"_pres"] = sensor_state.force.to(self.device)
+
         return obs_dict
