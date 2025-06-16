@@ -16,6 +16,10 @@ class SensorPredictor(nn.Module):
         ])
 
     def forward(self, x):
+        # Expect x to be of shape (B, input_dim)
+        # If x is of shape (N, B, input_dim), avg pool over N
+        if x.dim() == 3:
+            x = x.mean(dim=0)
         x = self.relu(self.fc1(x))
         output = {}
         for i, head in enumerate(self.heads):
