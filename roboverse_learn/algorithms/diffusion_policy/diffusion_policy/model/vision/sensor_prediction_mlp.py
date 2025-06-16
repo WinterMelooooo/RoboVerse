@@ -29,7 +29,7 @@ class SensorPredictor(nn.Module):
 
 class SensorPredictorCLS(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, sensor_names: list):
-        super(SensorPredictor, self).__init__()
+        super(SensorPredictorCLS, self).__init__()
         sensor_names = [name for name in sensor_names if name.endswith("_pred")]
         self.cls_token = nn.Parameter(torch.randn(1, 1, input_dim))
         self.fuse_atten = nn.MultiheadAttention(embed_dim=input_dim, num_heads=8)
@@ -46,7 +46,7 @@ class SensorPredictorCLS(nn.Module):
         # x is of shape (N, B, input_dim)
         B, D = x.shape[-2:]
         cls = self.cls_token.expand(1, B, D)
-        x = self.fuse_atten(cls, x, x)  # (1, B, input_dim)
+        x, _ = self.fuse_atten(cls, x, x)  # (1, B, input_dim)
         x = x.squeeze(0)  # (B, input_dim)
         x = self.relu(self.fc1(x))
         output = {}
@@ -76,7 +76,7 @@ class TransSensorPredictor(nn.Module):
         super().__init__()
         sensor_names = [name for name in sensor_names if name.endswith("_pred")]
         # Trainable <SOS> token (1, 1, embed_dim)
-        self.sos_token = nn.Parameter(torch.randn(1, 1, embed_dim))
+        self.sos_token = nn.Parameter(torch.randn(len(sensor_names), 1, embed_dim))
         # Transformer Decoder layers
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=embed_dim,
@@ -104,12 +104,11 @@ class TransSensorPredictor(nn.Module):
         """
         B = fused.shape[1]
         # Prepare target (Query): <SOS> repeated for batch
-        tgt = self.sos_token.repeat(1, B, 1)
+        tgt = self.sos_token.expand(-1, B, -1)
         # Decoder: masked self-attn not needed for single-step
         dec_out = self.decoder(tgt=tgt, memory=fused)
-        # dec_out shape: (1, B, embed_dim) -> remove seq_dim
-        dec_out = dec_out.squeeze(0) # (B, embed_dim)
+        # dec_out shape: (N_sensors, B, embed_dim)
         output = {}
         for i, head in enumerate(self.heads):
-            output[self.sensor_names[i]] = head(dec_out)
+            output[self.sensor_names[i]] = head(dec_out[i])
         return output
