@@ -13,10 +13,16 @@ shape_meta: &shape_meta
     point_cloud:
       shape: [4096, 3]
       type: point_cloud
-    franka_panda_leftfinger_touch_sensor:
+    franka_panda_leftfinger_touch_sensor_pres:
       shape: [3]
       type: force
-    franka_panda_rightfinger_touch_sensor:
+    franka_panda_leftfinger_touch_sensor_pred:
+      shape: [3]
+      type: force
+    franka_panda_rightfinger_touch_sensor_pres:
+      shape: [3]
+      type: force
+    franka_panda_rightfinger_touch_sensor_pred:
       shape: [3]
       type: force
   action:

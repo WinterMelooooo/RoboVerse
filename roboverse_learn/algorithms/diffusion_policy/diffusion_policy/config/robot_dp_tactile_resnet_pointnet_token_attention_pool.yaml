@@ -71,8 +71,8 @@ policy:
     prediction_model:
       _target_: diffusion_policy.model.vision.model_getter.get_prediction_transformer
       embed_dim: ${policy.obs_encoder.fusion_args.embed_dim}
-      output_dim: ${shape_meta.obs.franka_panda_leftfinger_touch_sensor.shape[0]}
-      sensor_names: [franka_panda_leftfinger_touch_sensor, franka_panda_rightfinger_touch_sensor]
+      output_dim: ${shape_meta.obs.franka_panda_leftfinger_touch_sensor_pred.shape[0]}
+      sensor_names: [franka_panda_leftfinger_touch_sensor_pred, franka_panda_rightfinger_touch_sensor_pred]
       n_heads: 8
       ff_dim: 1024
       num_layers: 2

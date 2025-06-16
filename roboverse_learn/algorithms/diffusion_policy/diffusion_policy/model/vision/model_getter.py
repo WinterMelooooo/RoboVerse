@@ -209,7 +209,7 @@ def get_state_mlp(observation_space: Dict,
 def get_sensor_mlp(observation_space: Dict,
                   state_mlp_size=(64, 64),
                   state_mlp_activation_fn=nn.ReLU,):
-        state_key = 'franka_panda_leftfinger_touch_sensor'
+        state_key = 'franka_panda_leftfinger_touch_sensor_pred'
         state_shape = observation_space[state_key]["shape"]
         if len(state_mlp_size) == 0:
             raise RuntimeError(f"State mlp size is empty")

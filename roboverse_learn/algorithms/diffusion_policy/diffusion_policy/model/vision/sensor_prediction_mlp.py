@@ -5,6 +5,7 @@ from typing import List
 class SensorPredictor(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, sensor_names: list):
         super(SensorPredictor, self).__init__()
+        sensor_names = [name for name in sensor_names if name.endswith("_pred")]
         num_heads = len(sensor_names)
         self.sensor_names = sensor_names
         self.fc1 = nn.Linear(input_dim, hidden_dim)
@@ -41,6 +42,7 @@ class TransSensorPredictor(nn.Module):
                  num_layers: int = 4,
                  dropout: float = 0.1):
         super().__init__()
+        sensor_names = [name for name in sensor_names if name.endswith("_pred")]
         # Trainable <SOS> token (1, 1, embed_dim)
         self.sos_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         # Transformer Decoder layers

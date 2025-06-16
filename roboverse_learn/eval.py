@@ -100,10 +100,19 @@ def main():
     task.episode_length = args.action_set_steps * args.max_step
     robot = get_robot(args.robot)
     camera = PinholeCameraCfg(pos=(1.5, 0, 1.5), look_at=(0.0, 0.0, 0.0))
+    sensors = []
+    if args.use_touch:
+        import sys
+
+        sys.path.append(".")
+        from roboverse_learn.algorithms.utils.get_sensor import get_touch_sensors
+
+        sensors = get_touch_sensors(args.task, args.robot, task, set_source_link=True)
     scenario = ScenarioCfg(
         task=args.task,
         robots=[args.robot],
         cameras=[camera],
+        sensors=sensors,
         random=args.random,
         sim=args.sim,
         num_envs=args.num_envs,
@@ -295,6 +304,19 @@ def main():
                 if "pcds" not in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
                     feat_dim = policyRunner.yaml_cfg.task.shape_meta.obs.point_cloud.shape[-1]
                     new_obs["point_cloud"] = new_obs["point_cloud"][..., :feat_dim]
+
+            if (
+                "franka_panda_leftfinger_touch_sensor" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
+            ):
+
+                print(type(obs))
+                print(obs.keys())
+                for sensor_name, sensor_data in obs.sensors.items():
+                    new_obs[sensor_name] = sensor_data
+                    print(f"sensor_name: {sensor_name}\nsensor_data: {sensor_data.shape}")
+                env.close()
+                raise NotImplementedError()
+
             images_list.append(np.array(new_obs["rgb"].cpu()))
             # for key, value in new_obs.items():
             #    print(f"Key: {key}, Value shape: {value.shape}")

@@ -107,7 +107,8 @@ def main():
             open(os.path.join(demo_dir, "sensordata.json"), encoding="utf-8")
         )
         names = list(demo_sensordata["sensor_dict_target"].keys())
-        sensor_arrays_dict = { name: [] for name in names }
+        next_sensor_arrays_dict = { name: [] for name in names }
+        pres_sensor_arrays_dict = { name: [] for name in names }
         find_sensordata = True
 
     if os.path.exists(save_dir):
@@ -168,9 +169,12 @@ def main():
                 continue
             # sensors
             if find_sensordata:
-                sensor_states = sensordata["sensor_dict_target"]
-                for name in sensor_states.keys():
-                    sensor_arrays_dict[name].append(sensor_states[name][i])
+                next_sensor_states = sensordata["sensor_dict_target"]
+                for name in next_sensor_states.keys():
+                    next_sensor_arrays_dict[name].append(next_sensor_states[name][i])
+                pres_sensor_states = sensordata["sensor_dict"]
+                for name in pres_sensor_states.keys():
+                    pres_sensor_arrays_dict[name].append(pres_sensor_states[name][i])
 
             # you can change state and action here
             if args.observation_space == "joint_pos":
@@ -289,8 +293,10 @@ def main():
             state_arrays = np.array(state_arrays)
             episode_ends_arrays = np.array(episode_ends_arrays)
             if find_sensordata:
-                for name in sensor_arrays_dict.keys():
-                    sensor_arrays_dict[name] = np.array(sensor_arrays_dict[name])
+                for name in next_sensor_arrays_dict.keys():
+                    next_sensor_arrays_dict[name] = np.array(next_sensor_arrays_dict[name])
+                for name in pres_sensor_arrays_dict.keys():
+                    pres_sensor_arrays_dict[name] = np.array(pres_sensor_arrays_dict[name])
 
             # Create datasets dynamically during the first write
             if current_batch == 0:
@@ -338,12 +344,20 @@ def main():
                     )
                 if find_sensordata:
                     sensors_group = zarr_data.create_group("sensors")
-                    for name in sensor_arrays_dict.keys():
+                    for name in next_sensor_arrays_dict.keys():
                         sensors_group.create_dataset(
-                            name,
-                            shape=(0, sensor_arrays_dict[name].shape[1]),
-                            chunks=(batch_size, sensor_arrays_dict[name].shape[1]),
-                            dtype=sensor_arrays_dict[name].dtype,
+                            name+"_pred",
+                            shape=(0, next_sensor_arrays_dict[name].shape[1]),
+                            chunks=(batch_size, next_sensor_arrays_dict[name].shape[1]),
+                            dtype=next_sensor_arrays_dict[name].dtype,
+                            compressor=compressor,
+                            overwrite=True,
+                        )
+                        sensors_group.create_dataset(
+                            name+"_pres",
+                            shape=(0, pres_sensor_arrays_dict[name].shape[1]),
+                            chunks=(batch_size, pres_sensor_arrays_dict[name].shape[1]),
+                            dtype=pres_sensor_arrays_dict[name].dtype,
                             compressor=compressor,
                             overwrite=True,
                         )
@@ -366,8 +380,9 @@ def main():
             if args.store_pnt_cloud:
                 zarr_data["head_camera_pnt_cloud"].append(head_camera_pnt_cloud_arrays)
             if find_sensordata:
-                for name in sensor_arrays_dict.keys():
-                    zarr_data["sensors"][name].append(sensor_arrays_dict[name])
+                for name in next_sensor_arrays_dict.keys():
+                    zarr_data["sensors"][name+"_pred"].append(next_sensor_arrays_dict[name])
+                    zarr_data["sensors"][name+"_pres"].append(pres_sensor_arrays_dict[name])
 
             print(f"Batch {current_batch + 1} written with {len(head_camera_arrays)} samples.")
 
@@ -381,8 +396,9 @@ def main():
             if args.store_pnt_cloud:
                 head_camera_pnt_cloud_arrays = []
             if find_sensordata:
-                for name in sensor_arrays_dict.keys():
-                    sensor_arrays_dict[name] = []
+                for name in next_sensor_arrays_dict.keys():
+                    next_sensor_arrays_dict[name] = []
+                    pres_sensor_arrays_dict[name] = []
             current_batch += 1
 
     # Save metadata to a JSON file

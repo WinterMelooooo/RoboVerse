@@ -157,6 +157,7 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
         except Exception as e:
             device = torch.device("cuda")
         self.to(device)
+        self.cuda_device = device
 
 
     def forward(self, obs_dict, use_gt_sensor):
@@ -168,8 +169,8 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
         img_features = list()
         low_dim_features = list()
         pntcloud_features = list()
-        sensor_state_features = list()
-        device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
+        pres_sensor_state_features = list()
+        device = self.cuda_device
         # run each rgb obs to independent models
         for key in self.img_keys:
             img = obs_dict[key]
@@ -216,21 +217,20 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
             pnt_cloud = self.key_transform_map[key](pnt_cloud)
             feature = self.key_model_map[key](pnt_cloud[..., :3])  # assuming the first 3 dimensions are x, y, z
             pntcloud_features.append(feature.to(device))
-            if pnt_cloud.shape[-1] > 3:
-                extra = pnt_cloud[..., 3:]  # assuming the extra features are in the last dimensions
-            # print(f"{key}: {features[-1].device}")
+
 
         for key in self.sensor_state_keys:
-            sensor_state = obs_dict[key]
-            if batch_size is None:
-                batch_size = sensor_state.shape[0]
-            else:
-                assert batch_size == sensor_state.shape[0]
-            assert sensor_state.shape[1:] == self.key_shape_map[key]
-            sensor_state = self.key_transform_map[key](sensor_state)
-            feature = self.key_model_map[key](sensor_state) #[B, D]
-            sensor_state_features.append(feature.to(device)) #[N, B, D]
-            # print(f"{key}: {features[-1].device}")
+            if key.endswith("_pres"):
+                pres_sensor_state = obs_dict[key]
+                if batch_size is None:
+                    batch_size = pres_sensor_state.shape[0]
+                else:
+                    assert batch_size == pres_sensor_state.shape[0]
+                assert pres_sensor_state.shape[1:] == self.key_shape_map[key]
+                pres_sensor_state = self.key_transform_map[key](pres_sensor_state)
+                feature = self.key_model_map[key](pres_sensor_state) #[B, D]
+                pres_sensor_state_features.append(feature.to(device)) #[N, B, D]
+                # print(f"{key}: {features[-1].device}")
 
         # Dropout
         if torch.rand((), device=device) < self.dropout:
@@ -240,15 +240,15 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
                 pntcloud_features = [f * 0.0 for f in pntcloud_features]
 
         # concatenate all features
-        fused = self.primary_fusion_func(img_features=img_features, low_dim_features=low_dim_features, pntcloud_features=pntcloud_features, sensor_state_features=sensor_state_features)
+        fused = self.primary_fusion_func(img_features=img_features, low_dim_features=low_dim_features, pntcloud_features=pntcloud_features, pres_sensor_state_features=pres_sensor_state_features)
         predict_sensors_state = self.prediction_model(fused) # Sensor_Name: [B, D]
 
-        target_sensors_state = {
-            key: obs_dict[key] for key in self.sensor_state_keys
+        pred_sensors_state = {
+            key: obs_dict[key] for key in self.sensor_state_keys if key.endswith("_pred")
         } if use_gt_sensor else predict_sensors_state
 
         pred_sensor_state_features = list()
-        for sensor_name, predict_sensor_state in target_sensors_state.items():
+        for sensor_name, predict_sensor_state in pred_sensors_state.items():
             if predict_sensor_state.shape[0] != batch_size:
                 raise ValueError(
                     f"Batch size mismatch: {predict_sensor_state.shape} vs {batch_size}"
@@ -356,7 +356,7 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
 
             self.use_independent_attention = use_independent_attention
             self.use_modality_encoding = use_modality_encoding
-            self.n_tokens = len(self.img_keys) + len(self.point_cloud_keys) + len(self.low_dim_keys) + 2*len(self.sensor_state_keys)
+            self.n_tokens = len(self.img_keys) + len(self.point_cloud_keys) + len(self.low_dim_keys) + len(self.sensor_state_keys)
             if use_independent_attention:
                 self.cross_attn_pcd_rgb = nn.MultiheadAttention(embed_dim, num_heads)
                 self.cross_attn_state_vis = nn.MultiheadAttention(embed_dim, num_heads)
@@ -385,14 +385,14 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
                 if self.use_independent_attention:
                     self.pred_atten_fusion = nn.MultiheadAttention(embed_dim, num_heads)
             else:
-                raise ValueError(f"Unknown secondary fusion function: {self.secondary_fusion_func}")
+                raise ValueError(f"Unknown secondary fusion function: {name_secondary_fusion_func}")
             return self._primary_cross_attention_features, self._secondary_cross_attention_features
 
-    def _primary_cross_attention_features(self, img_features, low_dim_features, pntcloud_features, sensor_state_features):
+    def _primary_cross_attention_features(self, img_features, low_dim_features, pntcloud_features, pres_sensor_state_features):
         img_feats = [self.img_proj(f) for f in img_features] # [N1, B, embed_dim]
         pc_feats = [self.pc_proj(f) for f in pntcloud_features] # [N2, B, embed_dim]
         low_dim_feats = [self.state_proj(f) for f in low_dim_features] # [N3, B, embed_dim]
-        sensor_state_feats = [self.sensor_proj(f) for f in sensor_state_features] # [N4, B, embed_dim]
+        sensor_state_feats = [self.sensor_proj(f) for f in pres_sensor_state_features] # [N4, B, embed_dim]
         if self.use_modality_encoding:
             device = img_feats[0].device
             embed = lambda idx: self.modality_embed(torch.tensor(idx, device=device, dtype=torch.long))  # (embed_dim,)

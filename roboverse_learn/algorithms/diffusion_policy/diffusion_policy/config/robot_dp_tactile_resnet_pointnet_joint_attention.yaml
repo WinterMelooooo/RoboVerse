@@ -71,9 +71,9 @@ policy:
     prediction_model:
       _target_: diffusion_policy.model.vision.model_getter.get_prediction_mlp
       input_dim: ${policy.obs_encoder.fusion_args.embed_dim}
-      output_dim: ${shape_meta.obs.franka_panda_leftfinger_touch_sensor.shape[0]}
+      output_dim: ${shape_meta.obs.franka_panda_leftfinger_touch_sensor_pred.shape[0]}
       hidden_dim: 16
-      sensor_names: [franka_panda_leftfinger_touch_sensor, franka_panda_rightfinger_touch_sensor]
+      sensor_names: [franka_panda_leftfinger_touch_sensor_pred, franka_panda_rightfinger_touch_sensor]
     img_encoder_args:
       resize_shape: null
       crop_shape: null
