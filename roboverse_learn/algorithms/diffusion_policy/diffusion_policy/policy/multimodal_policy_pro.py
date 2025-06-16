@@ -262,8 +262,6 @@ class MultiModalPolicyPro(BaseImagePolicy):
                 reduction="mean",
             )
 
-        if self.calculate_ee_loss:
-            raise NotImplementedError("EE loss calculation is not implemented yet.")
         sensor_pred_loss /= len(pred_sensor)
         # generate impainting mask
         condition_mask = self.mask_generator(trajectory.shape)

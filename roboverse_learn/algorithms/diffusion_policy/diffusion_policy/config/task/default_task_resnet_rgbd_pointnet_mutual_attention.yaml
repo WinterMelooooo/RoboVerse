@@ -27,3 +27,4 @@ dataset:
   batch_size: 128
   max_train_episodes: null
   rgb_with_depth: True
+  norm_pnt_cloud: False

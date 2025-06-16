@@ -27,3 +27,4 @@ dataset:
   batch_size: 128
   max_train_episodes: null
   pnt_cloud_with_extra: True
+  norm_pnt_cloud: False
