@@ -30,6 +30,8 @@ class MultiModalPolicyPro(BaseImagePolicy):
         n_groups=8,
         cond_predict_scale=True,
         calculate_ee_loss=False,
+        w_diff = 1.0,
+        w_pred = 1.0,
         # parameters passed to step
         **kwargs,
     ):
@@ -77,7 +79,8 @@ class MultiModalPolicyPro(BaseImagePolicy):
         self.n_action_steps = n_action_steps
         self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
-        self.calculate_ee_loss = calculate_ee_loss
+        self.w_diff = w_diff
+        self.w_pred = w_pred
         self.kwargs = kwargs
 
         if num_inference_steps is None:
@@ -259,7 +262,6 @@ class MultiModalPolicyPro(BaseImagePolicy):
                 reduction="mean",
             )
 
-        ee_loss = 0.0
         if self.calculate_ee_loss:
             raise NotImplementedError("EE loss calculation is not implemented yet.")
         sensor_pred_loss /= len(pred_sensor)
@@ -301,4 +303,4 @@ class MultiModalPolicyPro(BaseImagePolicy):
         diffusion_loss = diffusion_loss * loss_mask.type(diffusion_loss.dtype)
         diffusion_loss = reduce(diffusion_loss, "b ... -> b (...)", "mean")
         diffusion_loss = diffusion_loss.mean()
-        return diffusion_loss + sensor_pred_loss + ee_loss
+        return self.w_diff * diffusion_loss + self.w_pred * sensor_pred_loss

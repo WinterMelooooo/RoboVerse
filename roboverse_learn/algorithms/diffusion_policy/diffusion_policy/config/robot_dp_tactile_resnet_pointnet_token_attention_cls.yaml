@@ -113,6 +113,8 @@ policy:
   kernel_size: 5
   n_groups: 8
   cond_predict_scale: True
+  w_diff: 0.8
+  w_pred: 0.2
 
   # scheduler.step params
   # predict_epsilon: True
