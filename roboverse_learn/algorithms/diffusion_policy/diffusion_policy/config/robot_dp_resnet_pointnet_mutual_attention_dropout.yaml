@@ -84,6 +84,7 @@ policy:
       post_fusion_func: sum
       norm_proj: False
       use_residual: True
+      use_modality_encoding: True
       dropout: 0.2
 
 
