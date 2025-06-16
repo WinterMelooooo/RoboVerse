@@ -233,7 +233,7 @@ class MultiModalEncoderProMax(ModuleAttrMixin):
                 # print(f"{key}: {features[-1].device}")
 
         # Dropout
-        if torch.rand((), device=device) < self.dropout:
+        if self.training and torch.rand((), device=device) < self.dropout:
             if torch.rand((), device=device) < 0.5:
                 img_features = [f * 0.0 for f in img_features]
             else:
