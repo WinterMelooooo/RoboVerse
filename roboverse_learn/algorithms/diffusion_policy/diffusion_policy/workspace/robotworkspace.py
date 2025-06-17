@@ -97,6 +97,8 @@ class RobotWorkspace(BaseWorkspace):
         # configure training state
         self.global_step = 0
         self.epoch = 0
+        self.best_val_loss = float("inf")
+        self.best_epoch = 0
 
     def run(self):
         cfg = copy.deepcopy(self.cfg)
@@ -343,7 +345,12 @@ class RobotWorkspace(BaseWorkspace):
                         val_loss = torch.mean(torch.tensor(val_losses)).item()
                         # log epoch average validation loss
                         step_log["val_loss"] = val_loss
-
+                        if self.local_rank == 0 and val_loss < self.best_val_loss:
+                            self.best_val_loss = val_loss
+                            self.best_epoch = self.epoch
+                            # 如果你用 BaseWorkspace.save_checkpoint：它会保存 model、optimizer、global_step、epoch
+                            best_path = self.save_checkpoint("best.ckpt")
+                            print(f"[Epoch {self.epoch}] New best val loss {val_loss:.4f}, saved to {best_path}")
             # run diffusion sampling on a training batch
             if (self.epoch % cfg.training.sample_every) == 0:
                 with torch.no_grad():
@@ -394,6 +401,7 @@ class RobotWorkspace(BaseWorkspace):
                     wandb_run.log(step_log, step=self.global_step)
             self.global_step += 1
             self.epoch += 1
+        print(f"Training finished, best val loss {self.best_val_loss:.4f} at epoch {self.best_epoch}")
         if self.local_rank == 0:
             # json_logger.close()
             if wandb_run is not None:

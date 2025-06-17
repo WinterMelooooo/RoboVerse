@@ -1,280 +1,46 @@
-import torch
-import numpy as np
-import os
-import pickle
-import argparse
-import matplotlib.pyplot as plt
-import yaml
-import json
-from copy import deepcopy
-from tqdm import tqdm
-from einops import rearrange
+import sys
 
-from .constants import DT
-from .constants import PUPPET_GRIPPER_JOINT_OPEN
-from .utils import load_data  # data functions
-from .utils import compute_dict_mean, set_seed, detach_dict  # helper functions
-from .policy import ACTPolicy, CNNMLPPolicy
+# use line-buffering for both stdout and stderr
+sys.stdout = open(sys.stdout.fileno(), mode="w", buffering=1)
+sys.stderr = open(sys.stderr.fileno(), mode="w", buffering=1)
 
-import IPython
-e = IPython.embed
-from datetime import datetime
+import pathlib
+
+import hydra
+from omegaconf import OmegaConf
+
+import rootutils
+rootutils.setup_root(__file__, pythonpath=True)
+
+# allows arbitrary python code execution in configs using the ${eval:''} resolver
+OmegaConf.register_new_resolver("eval", eval, replace=True)
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
-local_rank = int(os.environ["LOCAL_RANK"])
-world_size = int(os.environ["WORLD_SIZE"])
+import os
+import torch
 
-def main(args):
-    global local_rank, world_size
+
+abs_config_path = str(pathlib.Path(__file__).resolve().parent.joinpath("act", "config").absolute())
+
+@hydra.main(
+    version_base=None,
+    config_path=abs_config_path,
+)
+def main(cfg: OmegaConf):
+
+    OmegaConf.resolve(cfg)
+
+    cls = hydra.utils.get_class(cfg._target_)
+
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend="Gloo")
-    seed = args["seed"]
-    set_seed(seed)
-    # command line parameters
-    policy_class = args['policy_class']
-    task_name = args['task_name']
-    batch_size_train = args['batch_size']
-    batch_size_val = args['batch_size']
-    num_epochs = args['num_epochs']
 
-    # get task parameters
-    dataset_dir = args['dataset_dir']
-    num_episodes = args['num_episodes']
-    episode_len = args['episode_len']
-    camera_names = args['camera_names']
-
-    # fixed parameters
-    lr_backbone = 1e-5
-    backbone = 'resnet18'
-    if policy_class == 'ACT':
-        enc_layers = 4
-        dec_layers = 7
-        nheads = 8
-        policy_config = {'lr': args['lr'],
-                         'num_queries': args['chunk_size'],
-                         'kl_weight': args['kl_weight'],
-                         'hidden_dim': args['hidden_dim'],
-                         'dim_feedforward': args['dim_feedforward'],
-                         'lr_backbone': lr_backbone,
-                         'backbone': backbone,
-                         'enc_layers': enc_layers,
-                         'dec_layers': dec_layers,
-                         'nheads': nheads,
-                         'camera_names': camera_names,
-                         'state_dim': args['state_dim']
-                         }
-    elif policy_class == 'CNNMLP':
-        policy_config = {'lr': args['lr'], 'lr_backbone': lr_backbone, 'backbone': backbone, 'num_queries': 1,
-                         'camera_names': camera_names, }
-    else:
-        raise NotImplementedError
-
-    ckpt_dir = f"info/outputs/ACT/{datetime.now().strftime('%Y.%m.%d')}/{datetime.now().strftime('%H.%M.%S')}_{task_name}_{num_episodes}"
-
-    # Load metadata from dataset directory
-    metadata_path = os.path.join(dataset_dir, 'metadata.json')
-    dataset_metadata = {}
-    if os.path.exists(metadata_path):
-        with open(metadata_path, 'r') as f:
-            dataset_metadata = json.load(f)
-
-    config = {
-        'num_epochs': num_epochs,
-        'ckpt_dir': ckpt_dir,
-        'episode_len': episode_len,
-        'lr': args['lr'],
-        'policy_class': policy_class,
-        'policy_config': policy_config,
-        'task_name': task_name,
-        'seed': args['seed'],
-        'temporal_agg': args['temporal_agg'],
-        'camera_names': camera_names,
-        'real_robot': True,
-        'data': dataset_metadata,  # Add the dataset metadata to config
-    }
-
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=seed)
-
-    # save dataset stats
-    if not os.path.isdir(ckpt_dir):
-        os.makedirs(ckpt_dir)
-    stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
-    with open(stats_path, 'wb') as f:
-        pickle.dump(stats, f)
-
-    # Save config to cfg.yaml
-    config_path = os.path.join(ckpt_dir, 'cfg.yaml')
-    with open(config_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
-
-    best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info
-
-    # save best checkpoint
-    ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
-    torch.save(best_state_dict, ckpt_path)
-    print(f'Best ckpt, val loss {min_val_loss:.6f} @ epoch{best_epoch}')
+    output_dir = cfg.training.output_dir if cfg.training.output_dir else None
+    workspace= cls(cfg, local_rank=local_rank, world_size=world_size, output_dir=output_dir)
+    workspace.run()
 
 
-def make_policy(policy_class, policy_config):
-    if policy_class == 'ACT':
-        policy = ACTPolicy(policy_config)
-    elif policy_class == 'CNNMLP':
-        policy = CNNMLPPolicy(policy_config)
-    else:
-        raise NotImplementedError
-    return policy
-
-
-def make_optimizer(policy_class, policy):
-    if policy_class == 'ACT':
-        optimizer = policy.configure_optimizers()
-    elif policy_class == 'CNNMLP':
-        optimizer = policy.configure_optimizers()
-    else:
-        raise NotImplementedError
-    return optimizer
-
-
-def forward_pass(data, policy):
-    image_data, qpos_data, action_data, is_pad = data
-    image_data, qpos_data, action_data, is_pad = image_data.cuda(), qpos_data.cuda(), action_data.cuda(), is_pad.cuda()
-    return policy(qpos_data, image_data, action_data, is_pad)
-
-
-def train_bc(train_dataloader, val_dataloader, config):
-    global local_rank, world_size
-    num_epochs = config['num_epochs']
-    ckpt_dir = config['ckpt_dir']
-    seed = config['seed']
-    policy_class = config['policy_class']
-    policy_config = config['policy_config']
-
-    set_seed(seed)
-
-    policy = make_policy(policy_class, policy_config)
-    policy.cuda()
-    optimizer = make_optimizer(policy_class, policy)
-    DDP(
-        policy,
-        device_ids=[local_rank],
-        output_device=local_rank,
-        find_unused_parameters=False,
-    )
-    train_history = []
-    validation_history = []
-    min_val_loss = np.inf
-    best_ckpt_info = None
-    if local_rank == 0:
-        epoch_iter = tqdm(range(num_epochs), desc="Epoch")
-    else:
-        epoch_iter = range(num_epochs)
-    for epoch in epoch_iter:
-        if local_rank == 0:
-            epoch_iter.set_description(f"Epoch {epoch+1}/{num_epochs}")
-        train_dataloader.sampler.set_epoch(epoch)
-        val_dataloader.sampler.set_epoch(epoch)
-        # validation
-        with torch.inference_mode():
-            policy.eval()
-            epoch_dicts = []
-            for batch_idx, data in enumerate(val_dataloader):
-                forward_dict = forward_pass(data, policy)
-                epoch_dicts.append(forward_dict)
-            epoch_summary = compute_dict_mean(epoch_dicts)
-            validation_history.append(epoch_summary)
-
-            epoch_val_loss = epoch_summary['loss']
-            if epoch_val_loss < min_val_loss:
-                min_val_loss = epoch_val_loss
-                best_ckpt_info = (epoch, min_val_loss, deepcopy(policy.state_dict()))
-        #print(f'Val loss:   {epoch_val_loss:.5f}')
-        summary_string = ''
-        for k, v in epoch_summary.items():
-            summary_string += f'{k}: {v.item():.3f} '
-        #print(summary_string)
-
-        # training
-        policy.train()
-        optimizer.zero_grad()
-        for batch_idx, data in enumerate(train_dataloader):
-            forward_dict = forward_pass(data, policy)
-            # backward
-            loss = forward_dict['loss']
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            train_history.append(detach_dict(forward_dict))
-        epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
-        epoch_train_loss = epoch_summary['loss']
-        #print(f'Train loss: {epoch_train_loss:.5f}')
-        if local_rank == 0:
-            epoch_iter.set_postfix(loss=epoch_train_loss, refresh=False)
-        summary_string = ''
-        for k, v in epoch_summary.items():
-            summary_string += f'{k}: {v.item():.3f} '
-        #print(summary_string)
-
-        if epoch % 100 == 0 and local_rank == 0:
-            ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
-            torch.save(policy.state_dict(), ckpt_path)
-            plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
-
-    ckpt_path = os.path.join(ckpt_dir, f'policy_last.ckpt')
-    if local_rank == 0:
-        torch.save(policy.state_dict(), ckpt_path)
-
-    best_epoch, min_val_loss, best_state_dict = best_ckpt_info
-    ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{best_epoch}_seed_{seed}.ckpt')
-    if local_rank == 0:
-        torch.save(best_state_dict, ckpt_path)
-        print(f'Training finished:\nSeed {seed}, val loss {min_val_loss:.6f} at epoch {best_epoch}')
-
-    # save training curves
-    #plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed)
-
-    return best_ckpt_info
-
-
-def plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed):
-    # save training curves
-    for key in train_history[0]:
-        plot_path = os.path.join(ckpt_dir, f'train_val_{key}_seed_{seed}.png')
-        plt.figure()
-        train_values = [summary[key].item() for summary in train_history]
-        val_values = [summary[key].item() for summary in validation_history]
-        plt.plot(np.linspace(0, num_epochs-1, len(train_history)), train_values, label='train')
-        plt.plot(np.linspace(0, num_epochs-1, len(validation_history)), val_values, label='validation')
-        # plt.ylim([-0.1, 1])
-        plt.tight_layout()
-        plt.legend()
-        plt.title(key)
-        plt.savefig(plot_path)
-    print(f'Saved plots to {ckpt_dir}')
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--policy_class', action='store', type=str, help='policy_class, capitalize', required=True)
-    parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
-    parser.add_argument('--batch_size', action='store', type=int, help='batch_size', required=True)
-    parser.add_argument('--seed', action='store', type=int, help='seed', required=True)
-    parser.add_argument('--num_epochs', action='store', type=int, help='num_epochs', required=True)
-    parser.add_argument('--lr', action='store', type=float, help='lr', required=True)
-
-    # for ACT
-    parser.add_argument('--camera_names', nargs='+', type=str, default=['head_camera'], help='camera names')
-    parser.add_argument('--episode_len', action='store', type=int, default=400, help='episode length')
-
-    parser.add_argument('--num_episodes', action='store', type=int, help='num_episodes', required=False)
-    parser.add_argument('--dataset_dir', action='store', type=str, help='dataset_dir', required=False)
-    parser.add_argument('--kl_weight', action='store', type=int, help='KL Weight', required=False)
-    parser.add_argument('--chunk_size', action='store', type=int, help='chunk_size', required=False)
-    parser.add_argument('--hidden_dim', action='store', type=int, help='hidden_dim', required=False)
-    parser.add_argument('--dim_feedforward', action='store', type=int, help='dim_feedforward', required=False)
-    parser.add_argument('--temporal_agg', action='store_true')
-    parser.add_argument('--state_dim', action='store', type=int, help='state_dim', required=False, default=9)
-
-    main(vars(parser.parse_args()))
+if __name__ == "__main__":
+    main()
