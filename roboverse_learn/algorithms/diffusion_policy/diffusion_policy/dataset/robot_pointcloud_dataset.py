@@ -34,6 +34,12 @@ ROBOT_ROOT_STATES = {
          1.0, 0.0, 0.0, 0.0,
          0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
          dtype=torch.float32),
+
+    "PickOrangeJuice" : torch.tensor(
+        [-0.6214195489883423, 0.0024574007838964462, 0.0,
+          1.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0],
+        dtype=torch.float32),
 }
 
 class RobotPointCloudDataset(BaseImageDataset):

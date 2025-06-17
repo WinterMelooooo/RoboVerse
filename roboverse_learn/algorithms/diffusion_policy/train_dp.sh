@@ -50,7 +50,6 @@ fi
 echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
 echo -e "master port: ${master_port}"
 echo -e "seed: ${seed}"
-echo -e "norm_pnt_cloud: ${norm_pnt_cloud}"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}

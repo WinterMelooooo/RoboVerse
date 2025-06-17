@@ -10,7 +10,7 @@ from PIL import Image
 module_path = os.path.abspath(os.path.join(__file__, "../../diffusion_policy/diffusion_policy/common"))
 sys.path.append(module_path)
 from replay_buffer import *
-
+from torch.utils.data.distributed import DistributedSampler
 import IPython
 e = IPython.embed
 
@@ -202,7 +202,7 @@ def get_norm_stats(dataset_dir, num_episodes):
 
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=1):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -215,9 +215,20 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     # construct dataset and dataloader
     train_dataset = ZarrEpisodicRoboVerseDataset(train_indices, dataset_dir, camera_names, norm_stats)
     val_dataset = ZarrEpisodicRoboVerseDataset(val_indices, dataset_dir, camera_names, norm_stats)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=True, pin_memory=True, num_workers=1, prefetch_factor=1)
-
+    train_sampler = DistributedSampler(
+        train_dataset, shuffle=True, seed=seed, drop_last=False
+    )
+    val_sampler = DistributedSampler(
+        val_dataset, shuffle=True, seed=seed, drop_last=False
+    )
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=batch_size_train, sampler=train_sampler,
+        pin_memory=True, num_workers=1, prefetch_factor=1
+    )
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=batch_size_val, sampler=val_sampler,
+        pin_memory=True, num_workers=1, prefetch_factor=1
+    )
     return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
 
 

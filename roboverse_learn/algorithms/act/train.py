@@ -19,10 +19,19 @@ from .policy import ACTPolicy, CNNMLPPolicy
 import IPython
 e = IPython.embed
 from datetime import datetime
-
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+local_rank = int(os.environ["LOCAL_RANK"])
+world_size = int(os.environ["WORLD_SIZE"])
 
 def main(args):
-    set_seed(1)
+    global local_rank, world_size
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group(backend="Gloo")
+    seed = args["seed"]
+    set_seed(seed)
     # command line parameters
     policy_class = args['policy_class']
     task_name = args['task_name']
@@ -86,7 +95,7 @@ def main(args):
         'data': dataset_metadata,  # Add the dataset metadata to config
     }
 
-    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val)
+    train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=seed)
 
     # save dataset stats
     if not os.path.isdir(ckpt_dir):
@@ -136,6 +145,7 @@ def forward_pass(data, policy):
 
 
 def train_bc(train_dataloader, val_dataloader, config):
+    global local_rank, world_size
     num_epochs = config['num_epochs']
     ckpt_dir = config['ckpt_dir']
     seed = config['seed']
@@ -147,13 +157,25 @@ def train_bc(train_dataloader, val_dataloader, config):
     policy = make_policy(policy_class, policy_config)
     policy.cuda()
     optimizer = make_optimizer(policy_class, policy)
-
+    DDP(
+        policy,
+        device_ids=[local_rank],
+        output_device=local_rank,
+        find_unused_parameters=False,
+    )
     train_history = []
     validation_history = []
     min_val_loss = np.inf
     best_ckpt_info = None
-    for epoch in tqdm(range(num_epochs)):
-        print(f'\nEpoch {epoch}')
+    if local_rank == 0:
+        epoch_iter = tqdm(range(num_epochs), desc="Epoch")
+    else:
+        epoch_iter = range(num_epochs)
+    for epoch in epoch_iter:
+        if local_rank == 0:
+            epoch_iter.set_description(f"Epoch {epoch+1}/{num_epochs}")
+        train_dataloader.sampler.set_epoch(epoch)
+        val_dataloader.sampler.set_epoch(epoch)
         # validation
         with torch.inference_mode():
             policy.eval()
@@ -168,11 +190,11 @@ def train_bc(train_dataloader, val_dataloader, config):
             if epoch_val_loss < min_val_loss:
                 min_val_loss = epoch_val_loss
                 best_ckpt_info = (epoch, min_val_loss, deepcopy(policy.state_dict()))
-        print(f'Val loss:   {epoch_val_loss:.5f}')
+        #print(f'Val loss:   {epoch_val_loss:.5f}')
         summary_string = ''
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
-        print(summary_string)
+        #print(summary_string)
 
         # training
         policy.train()
@@ -187,27 +209,31 @@ def train_bc(train_dataloader, val_dataloader, config):
             train_history.append(detach_dict(forward_dict))
         epoch_summary = compute_dict_mean(train_history[(batch_idx+1)*epoch:(batch_idx+1)*(epoch+1)])
         epoch_train_loss = epoch_summary['loss']
-        print(f'Train loss: {epoch_train_loss:.5f}')
+        #print(f'Train loss: {epoch_train_loss:.5f}')
+        if local_rank == 0:
+            epoch_iter.set_postfix(loss=epoch_train_loss, refresh=False)
         summary_string = ''
         for k, v in epoch_summary.items():
             summary_string += f'{k}: {v.item():.3f} '
-        print(summary_string)
+        #print(summary_string)
 
-        if epoch % 100 == 0:
+        if epoch % 100 == 0 and local_rank == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{epoch}_seed_{seed}.ckpt')
             torch.save(policy.state_dict(), ckpt_path)
             plot_history(train_history, validation_history, epoch, ckpt_dir, seed)
 
     ckpt_path = os.path.join(ckpt_dir, f'policy_last.ckpt')
-    torch.save(policy.state_dict(), ckpt_path)
+    if local_rank == 0:
+        torch.save(policy.state_dict(), ckpt_path)
 
     best_epoch, min_val_loss, best_state_dict = best_ckpt_info
     ckpt_path = os.path.join(ckpt_dir, f'policy_epoch_{best_epoch}_seed_{seed}.ckpt')
-    torch.save(best_state_dict, ckpt_path)
-    print(f'Training finished:\nSeed {seed}, val loss {min_val_loss:.6f} at epoch {best_epoch}')
+    if local_rank == 0:
+        torch.save(best_state_dict, ckpt_path)
+        print(f'Training finished:\nSeed {seed}, val loss {min_val_loss:.6f} at epoch {best_epoch}')
 
     # save training curves
-    plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed)
+    #plot_history(train_history, validation_history, num_epochs, ckpt_dir, seed)
 
     return best_ckpt_info
 

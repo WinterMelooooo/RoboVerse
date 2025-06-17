@@ -1,11 +1,11 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=LiberoPickTomatoSauce
-level=0
-config_name=robot_dp
-num_epochs=200
-port=50044
+level=1
+config_name=robot_dp_test_rgbd
+num_epochs=300
+port=50049
 seed=42
-gpus=4,5,6,7
+gpus=0,1,2,3
 strategy=sqrt
 train_ratio=100
 logger=wandb

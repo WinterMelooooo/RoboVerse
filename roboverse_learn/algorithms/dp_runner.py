@@ -182,7 +182,8 @@ class DPRunner(PolicyRunner):
 
         if (
             "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()
-            and self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+            and (self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+                 or self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet")
         ):
             depth = obs["depth"]  # (N_env, H, W, 1) [znear, zfar]
             if self.policy_cfg.obs_config.norm_image:
