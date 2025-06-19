@@ -400,8 +400,8 @@ class RobotWorkspace(BaseWorkspace):
                     wandb_run.log(step_log, step=self.global_step)
             self.global_step += 1
             self.epoch += 1
-        print(f"Training finished, best val loss {self.best_val_loss:.4f} at epoch {self.best_epoch}")
         if self.local_rank == 0:
+            print(f"Training finished, best val loss {self.best_val_loss:.4f} at epoch {self.best_epoch}")
             # json_logger.close()
             if wandb_run is not None:
                 wandb_run.finish()
