@@ -348,8 +348,7 @@ class RobotWorkspace(BaseWorkspace):
                         if self.local_rank == 0 and val_loss < self.best_val_loss:
                             self.best_val_loss = val_loss
                             self.best_epoch = self.epoch
-                            # 如果你用 BaseWorkspace.save_checkpoint：它会保存 model、optimizer、global_step、epoch
-                            best_path = self.save_checkpoint("best.ckpt")
+                            best_path = self.save_checkpoint(os.path.join(cfg.checkpoint.save_root_dir, "best.ckpt"))
                             print(f"[Epoch {self.epoch}] New best val loss {val_loss:.4f}, saved to {best_path}")
             # run diffusion sampling on a training batch
             if (self.epoch % cfg.training.sample_every) == 0:

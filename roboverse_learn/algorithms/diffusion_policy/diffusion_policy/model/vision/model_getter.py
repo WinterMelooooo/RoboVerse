@@ -231,6 +231,27 @@ def get_sensor_mlp(observation_space: Dict,
         return state_mlp
 
 
+def get_late_fusion_resnet_dp3(**kawrgs):
+    try:
+        from .dp3_resnet_fusion_encoder import FusionLateEncoder
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.dp3_resnet_fusion_encoder import FusionLateEncoder
+    return FusionLateEncoder(**kawrgs)
+
+def get_early_fusion_resnet_dp3(**kawrgs):
+    try:
+        from .dp3_resnet_fusion_encoder import FusionEarlyEncoder
+    except:
+        import sys
+        sys.path.append(".")
+        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.dp3_resnet_fusion_encoder import FusionEarlyEncoder
+    return FusionEarlyEncoder(**kawrgs)
+
+
+
+
 def create_mlp(
         input_dim: int,
         output_dim: int,
@@ -273,21 +294,3 @@ def create_mlp(
 
 def get_identity():
     return nn.Identity()
-
-def get_late_fusion_resnet_dp3(**kawrgs):
-    try:
-        from .dp3_resnet_fusion_encoder import FusionLateEncoder
-    except:
-        import sys
-        sys.path.append(".")
-        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.dp3_resnet_fusion_encoder import FusionLateEncoder
-    return FusionLateEncoder(**kawrgs)
-
-def get_early_fusion_resnet_dp3(**kawrgs):
-    try:
-        from .dp3_resnet_fusion_encoder import FusionEarlyEncoder
-    except:
-        import sys
-        sys.path.append(".")
-        from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.model.vision.dp3_resnet_fusion_encoder import FusionEarlyEncoder
-    return FusionEarlyEncoder(**kawrgs)

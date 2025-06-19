@@ -37,7 +37,7 @@ class RobotStateEncoderArgs():
 
 
 
-class MultiModalEncoderProMax(ModuleAttrMixin):
+class MultiModalEncoderTactile(ModuleAttrMixin):
     def __init__(
         self,
         shape_meta: dict,

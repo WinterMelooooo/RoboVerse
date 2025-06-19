@@ -83,7 +83,7 @@ class TransSensorPredictor(nn.Module):
             nhead=n_heads,
             dim_feedforward=ff_dim,
             dropout=dropout,
-            activation='gelu'
+            activation='relu'
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         # Output head to map decoder output -> tactile signal dimension

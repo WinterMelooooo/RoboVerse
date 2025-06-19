@@ -13,7 +13,7 @@ from diffusion_policy.policy.base_image_policy import BaseImagePolicy
 from einops import rearrange, reduce
 
 
-class MultiModalPolicyPro(BaseImagePolicy):
+class MultiModalPolicyTactile(BaseImagePolicy):
     def __init__(
         self,
         shape_meta: dict,

@@ -29,7 +29,7 @@ shape_meta: &shape_meta
     shape: [9]
 
 dataset:
-  _target_: diffusion_policy.dataset.robot_multimodal_dataset_pro.MultiModalDatasetPro
+  _target_: diffusion_policy.dataset.robot_multimodal_dataset_tactile.MultiModalDatasetTactile
   zarr_path: diffusion_policy/data/useless.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}

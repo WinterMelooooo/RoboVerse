@@ -21,7 +21,7 @@ from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_
 from typing import Any, Dict, List
 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
 from termcolor import cprint
-class MultiModalDatasetPro(BaseImageDataset):
+class MultiModalDatasetTactile(BaseImageDataset):
     def __init__(
         self,
         zarr_path,
@@ -76,7 +76,7 @@ class MultiModalDatasetPro(BaseImageDataset):
         self.transform_pcd = ComposePCD(transform_pcd)
         self.name = zarr_path.split("/")[-1].split("_")[0]
         self.sensor_names = [key.split("/")[-1] for key in self.replay_buffer.keys() if key.startswith("sensors/")]
-        cprint(f"[MultiModalDatasetPro]: sensor names: {self.sensor_names}", "green")
+        cprint(f"[MultiModalDatasetTactile]: sensor names: {self.sensor_names}", "green")
         sequence_length = self.sampler.sequence_length
         self.buffers = {
             k: np.zeros((batch_size, sequence_length, *v.shape[1:]), dtype=v.dtype)
