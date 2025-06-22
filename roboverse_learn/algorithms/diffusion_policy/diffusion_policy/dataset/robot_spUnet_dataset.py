@@ -26,6 +26,7 @@ from torch.utils.data import default_collate
 
 sys.path.append(".")
 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
+from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import transform_point_cloud, ROBOT_ROOT_STATES
 
 VARIATION_DESCRIPTION = {
     "CloseBox": [
@@ -35,14 +36,6 @@ VARIATION_DESCRIPTION = {
         "shut the box lid",
     ],
 }
-
-ROBOT_ROOT_STATE = torch.tensor(
-    [-0.6149997711181641, 0.0, 0.0,    # 根节点的位置 xyz
-      1.0, 0.0, 0.0, 0.0,              # 根节点的姿态四元数 wxyz
-      0.0, 0.0, 0.0,                   # 根节点的线速度 vx,vy,vz
-      0.0, 0.0, 0.0],                  # 根节点的角速度 wx,wy,wz
-    dtype=torch.float32
-)
 
 
 def get_task_name(task_name):
@@ -80,6 +73,7 @@ class RobotPointCloudDataset(BaseImageDataset):
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
             keys=["head_camera", "state", "action", "head_camera_pnt_cloud"],
         )
+        self.name = zarr_path.split("/")[-1].split("_")[0]
         print(f"Replay buffer size: {self.replay_buffer.n_episodes}")
         keep_n_episodes = self.replay_buffer.n_episodes * max_visible_ratio / 100.0
         while self.replay_buffer.n_episodes > keep_n_episodes:
@@ -217,9 +211,10 @@ class RobotPointCloudDataset(BaseImageDataset):
         agent_pos = samples["state"].to(device, non_blocking=True)
         action = samples["action"].to(device, non_blocking=True)
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
+        print(f"point_cloud.shape = {point_cloud.shape}")
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
-            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)[...,6]# B, T, 4096, 6
+            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)[...,:6]# B, T, 4096, 6
             if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 6):
                 raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)")
         B, T, N, C = point_cloud.shape
@@ -259,24 +254,6 @@ class RobotPointCloudDataset(BaseImageDataset):
             data["goal"] = default_collate(goal_list)
         data = dict_apply(data, lambda x: x.to(device, non_blocking=True))
         return data
-
-def transform_point_cloud(point_cloud, robot_root_state, device=None):
-    if device is None:
-        device = point_cloud.device
-    if isinstance(point_cloud, np.ndarray):
-        point_cloud = torch.from_numpy(point_cloud).to(device)
-    root_xyz = robot_root_state[:3].to(device)
-    coords = point_cloud[..., :3]
-    colors = point_cloud[..., 3:]
-    if coords.dim() == 4:
-        root_pos = root_xyz.view(1, 1, 1, 3)
-    elif coords.dim() == 3:
-        root_pos = root_xyz.view(1, 1, 3)
-    else:
-        raise ValueError(f"Unexpected coords.dim() = {coords.dim()}")
-    coords = coords - root_pos
-    return torch.cat([coords, colors], dim=-1)  # 保持 (B,T,N,6) 或 (B,N,6)
-
 
 
 def _batch_sample_sequence(
