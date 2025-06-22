@@ -16,7 +16,9 @@ def check_chunks_compatible(chunks: tuple, shape: tuple):
         assert c > 0
 
 
-def rechunk_recompress_array(group, name, chunks=None, chunk_length=None, compressor=None, tmp_key="_temp"):
+def rechunk_recompress_array(
+    group, name, chunks=None, chunk_length=None, compressor=None, tmp_key="_temp"
+):
     old_arr = group[name]
     if chunks is None:
         if chunk_length is not None:
@@ -64,13 +66,18 @@ def get_optimal_chunks(shape, dtype, target_chunk_bytes=2e6, max_chunk_length=No
     for i in range(len(shape) - 1):
         this_chunk_bytes = itemsize * np.prod(rshape[:i])
         next_chunk_bytes = itemsize * np.prod(rshape[: i + 1])
-        if this_chunk_bytes <= target_chunk_bytes and next_chunk_bytes > target_chunk_bytes:
+        if (
+            this_chunk_bytes <= target_chunk_bytes
+            and next_chunk_bytes > target_chunk_bytes
+        ):
             split_idx = i
 
     rchunks = rshape[:split_idx]
     item_chunk_bytes = itemsize * np.prod(rshape[:split_idx])
     this_max_chunk_length = rshape[split_idx]
-    next_chunk_length = min(this_max_chunk_length, math.ceil(target_chunk_bytes / item_chunk_bytes))
+    next_chunk_length = min(
+        this_max_chunk_length, math.ceil(target_chunk_bytes / item_chunk_bytes)
+    )
     rchunks.append(next_chunk_length)
     len_diff = len(shape) - len(rchunks)
     rchunks.extend([1] * len_diff)
@@ -196,7 +203,9 @@ class ReplayBuffer:
             for key in keys:
                 value = src_root["data"][key]
                 cks = cls._resolve_array_chunks(chunks=chunks, key=key, array=value)
-                cpr = cls._resolve_array_compressor(compressors=compressors, key=key, array=value)
+                cpr = cls._resolve_array_compressor(
+                    compressors=compressors, key=key, array=value
+                )
                 if cks == value.chunks and cpr == value.compressor:
                     # copy without recompression
                     this_path = "/data/" + key
@@ -259,7 +268,6 @@ class ReplayBuffer:
         if_exists="replace",
         **kwargs,
     ):
-
         root = zarr.group(store)
         if self.backend == "zarr":
             # recompression free copy
@@ -274,13 +282,17 @@ class ReplayBuffer:
             meta_group = root.create_group("meta", overwrite=True)
             # save meta, no chunking
             for key, value in self.root["meta"].items():
-                _ = meta_group.array(name=key, data=value, shape=value.shape, chunks=value.shape)
+                _ = meta_group.array(
+                    name=key, data=value, shape=value.shape, chunks=value.shape
+                )
 
         # save data, chunk
         data_group = root.create_group("data", overwrite=True)
         for key, value in self.root["data"].items():
             cks = self._resolve_array_chunks(chunks=chunks, key=key, array=value)
-            cpr = self._resolve_array_compressor(compressors=compressors, key=key, array=value)
+            cpr = self._resolve_array_compressor(
+                compressors=compressors, key=key, array=value
+            )
             if isinstance(value, zarr.Array):
                 if cks == value.chunks and cpr == value.compressor:
                     # copy without recompression
@@ -316,18 +328,26 @@ class ReplayBuffer:
         **kwargs,
     ):
         store = zarr.DirectoryStore(os.path.expanduser(zarr_path))
-        return self.save_to_store(store, chunks=chunks, compressors=compressors, if_exists=if_exists, **kwargs)
+        return self.save_to_store(
+            store, chunks=chunks, compressors=compressors, if_exists=if_exists, **kwargs
+        )
 
     @staticmethod
     def resolve_compressor(compressor="default"):
         if compressor == "default":
-            compressor = numcodecs.Blosc(cname="lz4", clevel=5, shuffle=numcodecs.Blosc.NOSHUFFLE)
+            compressor = numcodecs.Blosc(
+                cname="lz4", clevel=5, shuffle=numcodecs.Blosc.NOSHUFFLE
+            )
         elif compressor == "disk":
-            compressor = numcodecs.Blosc("zstd", clevel=5, shuffle=numcodecs.Blosc.BITSHUFFLE)
+            compressor = numcodecs.Blosc(
+                "zstd", clevel=5, shuffle=numcodecs.Blosc.BITSHUFFLE
+            )
         return compressor
 
     @classmethod
-    def _resolve_array_compressor(cls, compressors: Union[dict, str, numcodecs.abc.Codec], key, array):
+    def _resolve_array_compressor(
+        cls, compressors: Union[dict, str, numcodecs.abc.Codec], key, array
+    ):
         # allows compressor to be explicitly set to None
         cpr = "nil"
         if isinstance(compressors, dict):
@@ -496,8 +516,12 @@ class ReplayBuffer:
             # create array
             if key not in self.data:
                 if is_zarr:
-                    cks = self._resolve_array_chunks(chunks=chunks, key=key, array=value)
-                    cpr = self._resolve_array_compressor(compressors=compressors, key=key, array=value)
+                    cks = self._resolve_array_chunks(
+                        chunks=chunks, key=key, array=value
+                    )
+                    cpr = self._resolve_array_compressor(
+                        compressors=compressors, key=key, array=value
+                    )
                     arr = self.data.zeros(
                         name=key,
                         shape=new_shape,

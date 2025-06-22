@@ -1,11 +1,11 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-task_name=StackCube
-level=0
-config_name=robot_dp_resnet_pointnet_mutual_attention_pro_modal_encoding
+task_name=LiberoPickOrangeJuice
+level=1
+config_name=robot_dp_pntcloud_spUnet
 num_epochs=2000
-port=50034
+port=50039
 seed=42
-gpus=0,1,2,3,4,5,6,7
+gpus=0,1,2,3
 strategy=sqrt
 train_ratio=100
 logger=wandb

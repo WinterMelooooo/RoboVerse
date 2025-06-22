@@ -21,14 +21,9 @@ except:
 
 
 def print_dict_keys(d: dict, prefix: str = ""):
-    """
-    递归打印字典 d 中的所有键。如果 prefix 不为空，将其作为当前键的前缀（用 '.' 分隔）。
-    """
     for k, v in d.items():
-        # 构造输出的“全路径”键名
         path = f"{prefix}.{k}" if prefix else k
         print(path)
-        # 如果值还是字典，就进一步递归
         if isinstance(v, dict):
             print_dict_keys(v, path)
 
@@ -45,15 +40,6 @@ class DPRunner(PolicyRunner):
         cls = hydra.utils.get_class(cfg._target_)
         workspace: RobotWorkspace = cls(cfg, output_dir=kwargs.get("output_dir", None))
         workspace.load_payload(payload, exclude_keys=["lr_scheduler"], include_keys=None)
-        #print(f"payload.keys: {list(payload.keys())}")
-        #print(f"state_dict.keys: {list(payload['state_dicts'].keys())}")
-        # 假设 payload 是你从磁盘加载的 checkpoint dict
-        #model_state = payload["state_dicts"]["model"]
-
-        # 打印 model_state 中所有（嵌套）键
-        #print_dict_keys(model_state)
-        #raise NotImplementedError()
-        # get policy from workspace
         policy = workspace.model
         if cfg.training.use_ema:
             policy = workspace.ema_model
@@ -72,6 +58,7 @@ class DPRunner(PolicyRunner):
                 dim = obs_cfg.agent_pos.shape[0]
             elif "qpos" in obs_cfg:
                 from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
+
                 dim = obs_cfg.qpos.shape[0]
                 transform_pcd = hydra.utils.instantiate(self.yaml_cfg.task.dataset.transform_pcd)
                 self.transform_pcd = ComposePCD(transform_pcd)
@@ -111,19 +98,24 @@ class DPRunner(PolicyRunner):
             result = result.transpose(0, 1)  # Policy expects (Batch_size, n_steps, ...)
 
         elif isinstance(all_obs[0], list):
-            from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_spUnet_dataset import point_collate_fn
+            from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_spUnet_dataset import (
+                point_collate_fn,
+            )
+
             device = "cuda"
-            per_env = [list(env_obs) for env_obs in zip(*all_obs)]  # [N_timesteps, [N_env, Dict]] -> [N_env, [N_timesteps, Dict]]
+            per_env = [
+                list(env_obs) for env_obs in zip(*all_obs)
+            ]  # [N_timesteps, [N_env, Dict]] -> [N_env, [N_timesteps, Dict]]
             # 2) 对每个环境取最后 n_steps 帧，不足时前面 pad 第一帧
             pcds = []
-            for env_seq in per_env: # [N_env, [N_timesteps, Dict]] -> [N_env, [N_obs_steps, Dict]]
+            for env_seq in per_env:  # [N_env, [N_timesteps, Dict]] -> [N_env, [N_obs_steps, Dict]]
                 if len(env_seq) >= n_steps:
                     trimmed = env_seq[-n_steps:]
                 else:
                     pad = [env_seq[0]] * (n_steps - len(env_seq))
                     trimmed = pad + env_seq
                 pcds.append(trimmed)  # trimmed is List[n_steps] of Dict
-            flat_pcds = sum( pcds, [] )  # list of dict, length = B * n_obs_steps
+            flat_pcds = sum(pcds, [])  # list of dict, length = B * n_obs_steps
 
             collated = point_collate_fn(flat_pcds)
             # {
@@ -177,13 +169,22 @@ class DPRunner(PolicyRunner):
             obs_dict["point_cloud"] = obs["point_cloud"]
             if "norm_pnt_cloud" in self.yaml_cfg.task.dataset.keys() and not self.yaml_cfg.task.dataset.norm_pnt_cloud:
                 print(f"Set PntCloud origin to robot root")
-                from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import ROBOT_ROOT_STATES, transform_point_cloud
-                obs_dict["point_cloud"] = transform_point_cloud(obs_dict["point_cloud"], ROBOT_ROOT_STATES, self.task_name, self.policy.device).cpu().numpy()
+                from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import (
+                    ROBOT_ROOT_STATES,
+                    transform_point_cloud,
+                )
 
-        if (
-            "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys()
-            and (self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
-                 or self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet")
+                obs_dict["point_cloud"] = (
+                    transform_point_cloud(
+                        obs_dict["point_cloud"], ROBOT_ROOT_STATES, self.task_name, self.policy.device
+                    )
+                    .cpu()
+                    .numpy()
+                )
+
+        if "head_cam" in self.yaml_cfg.task.shape_meta.obs.keys() and (
+            self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
+            or self.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
         ):
             depth = obs["depth"]  # (N_env, H, W, 1) [znear, zfar]
             if self.policy_cfg.obs_config.norm_image:
@@ -196,8 +197,8 @@ class DPRunner(PolicyRunner):
                 f"head_cam should be 4 channels, but got {obs_dict['head_cam'].shape}"
             )
         if "pcds" in self.yaml_cfg.task.shape_meta.obs.keys():
-            pcds = obs["point_cloud"] # (N_env, N_points, 6)
-            qpos = obs_dict["agent_pos"] # (N_env, 9)
+            pcds = obs["point_cloud"]  # (N_env, N_points, 6)
+            qpos = obs_dict["agent_pos"]  # (N_env, 9)
             new_obs_dict = dict()
             new_obs_dict["pcds"] = []
             new_obs_dict["qpos"] = qpos
@@ -206,22 +207,20 @@ class DPRunner(PolicyRunner):
                 colors = pcd[:, 3:6].astype(np.float32)
                 pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
                 # {
-                    #   'coord': Tensor[M,3],
-                    #   'grid_coord': Tensor[M,3],
-                    #   'feat': Tensor[M,F],
-                    #   'offset': Tensor[N_env]
+                #   'coord': Tensor[M,3],
+                #   'grid_coord': Tensor[M,3],
+                #   'feat': Tensor[M,F],
+                #   'offset': Tensor[N_env]
                 # }
                 new_obs_dict["pcds"].append(pcd_dict)
             # new_obs_dict["pcds"] = torch.stack(new_obs_dict["pcds"], dim=0) # (N_env, Dict)
             obs_dict = new_obs_dict
 
-        if (
-            "franka_panda_leftfinger_touch_sensor_pres" in self.yaml_cfg.task.shape_meta.obs.keys()
-        ):
-            #print(f"type obs:{type(obs)}")
-            #import pprint
-            #pprint.pprint(obs)
+        if "franka_panda_leftfinger_touch_sensor_pres" in self.yaml_cfg.task.shape_meta.obs.keys():
+            # print(f"type obs:{type(obs)}")
+            # import pprint
+            # pprint.pprint(obs)
             for sensor_name, sensor_state in obs["sensors"].items():
-                obs_dict[sensor_name+"_pres"] = sensor_state.force.to(self.device)
+                obs_dict[sensor_name + "_pres"] = sensor_state.force.to(self.device)
 
         return obs_dict

@@ -30,13 +30,15 @@ temp_dict = {
 }
 
 
-demo_dir = r"/home/ghr/yktang/RoboVerse/roboverse_demo/demo_isaaclab/StackCube-Level0/robot-franka/demo_0001"
+demo_dir = (
+    r"/home/ghr/yktang/RoboVerse/roboverse_demo/demo_isaaclab/LiberoPickOrangeJuice-Level0/robot-franka/demo_0001"
+)
 rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"))
 depths = iio.mimread(os.path.join(demo_dir, "depth_uint8.mp4"))
 with open(os.path.join(demo_dir, "metadata.json"), encoding="utf-8") as f:
     metadata = json.load(f)
 
-pnt_cloud_getter = PntCloudGetter("StackCube", use_point_crop=True)
+pnt_cloud_getter = PntCloudGetter("LiberoPickOrangeJuice", use_point_crop=True)
 
 
 i = 0
@@ -57,4 +59,5 @@ pnt_cloud = pnt_cloud_getter.get_point_cloud(
 from roboverse_learn.algorithms.utils.visualizer import visualizer
 
 print(pnt_cloud.shape)
+pnt_cloud = pnt_cloud[..., :6]
 visualizer.visualize_pointcloud(pnt_cloud)

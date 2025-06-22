@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from loguru import logger as log
+from termcolor import cprint
 
 from metasim.cfg.robots import BaseRobotCfg
 from metasim.cfg.scenario import ScenarioCfg

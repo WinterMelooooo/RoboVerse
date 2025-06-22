@@ -47,7 +47,10 @@ def main():
         mapping[new_idx] = original_idxes[new_idx]
 
     json_path = os.path.join(root_dir, "mapping.json")
-    json.dump(mapping, open(json_path, "w"), indent=4)
+    if os.path.exists(json_path):
+        print(f"Warning: {json_path} already exists. Do nothing.")
+    else:
+        json.dump(mapping, open(json_path, "w"), indent=4)
 
 
 if __name__ == "__main__":

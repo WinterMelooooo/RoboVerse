@@ -7,27 +7,31 @@ import h5py
 import json
 from torch.utils.data import TensorDataset, DataLoader
 from PIL import Image
-module_path = os.path.abspath(os.path.join(__file__, "../../diffusion_policy/diffusion_policy/common"))
+module_path = os.path.abspath(os.path.join(__file__, "../../../diffusion_policy/diffusion_policy/common"))
 sys.path.append(module_path)
-from replay_buffer import *
+try:
+    from replay_buffer import *
+except ImportError as e:
+    print(f"trying to import from {module_path}")
+    raise e
 from torch.utils.data.distributed import DistributedSampler
 import IPython
 e = IPython.embed
 
 class ZarrEpisodicRoboVerseDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
+    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, keys=None):
         super(ZarrEpisodicRoboVerseDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = False
-
+        keys = keys if keys is not None else ["head_camera", "state", "action"]
         # Load zarr data
         zarr_path = dataset_dir
         self.replay_buffer = ReplayBuffer.copy_from_path(
             zarr_path,
-            keys=["head_camera", "state", "action"]
+            keys=keys
         )
 
 
@@ -202,7 +206,7 @@ def get_norm_stats(dataset_dir, num_episodes):
 
 
 
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=1):
+def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=1, keys=None):
     print(f'\nData from: {dataset_dir}\n')
     # obtain train test split
     train_ratio = 0.8
@@ -213,8 +217,8 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
     # obtain normalization stats for state and action
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
     # construct dataset and dataloader
-    train_dataset = ZarrEpisodicRoboVerseDataset(train_indices, dataset_dir, camera_names, norm_stats)
-    val_dataset = ZarrEpisodicRoboVerseDataset(val_indices, dataset_dir, camera_names, norm_stats)
+    train_dataset = ZarrEpisodicRoboVerseDataset(train_indices, dataset_dir, camera_names, norm_stats, keys=keys)
+    val_dataset = ZarrEpisodicRoboVerseDataset(val_indices, dataset_dir, camera_names, norm_stats, keys=keys)
     train_sampler = DistributedSampler(
         train_dataset, shuffle=True, seed=seed, drop_last=False
     )

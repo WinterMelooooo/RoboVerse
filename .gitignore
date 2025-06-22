@@ -62,7 +62,7 @@ RoboVerseLearn
 # Third Party Repos
 orbit
 IsaacLab
-
+pointops
 *.log
 _data
 *.ipynb

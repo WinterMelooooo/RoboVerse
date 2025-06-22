@@ -22,6 +22,7 @@ rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 from PIL import Image
+from termcolor import cprint
 
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.scenario import ScenarioCfg
@@ -35,6 +36,7 @@ from metasim.utils.setup_util import (
     get_wrapper_class,
 )
 from roboverse_learn.algorithms import PolicyRunner, get_runner
+from roboverse_learn.algorithms.utils.train_data_selector import reorder_init_states
 
 
 @dataclass
@@ -69,7 +71,7 @@ class Args:
     """Number of steps to take for each action set"""
     save_video_freq: int = 1
     """Frequency of saving videos"""
-    max_step: int = 250
+    max_step: int = 1000
     """Maximum number of steps to collect"""
     gpu_id: int = 0
     """GPU ID to use"""
@@ -118,7 +120,7 @@ def main():
         num_envs=args.num_envs,
         headless=args.headless,
     )
-
+    task.episode_length = args.action_set_steps * args.max_step
     tic = time.time()
     env_class = get_sim_env_class(SimType(scenario.sim))
     env = env_class(scenario)
@@ -141,10 +143,7 @@ def main():
         subset=args.subset,
     )
     action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
-    if (
-        "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-        or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-    ):
+    if use_pcd(policyRunner.yaml_cfg):
         try:
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
         except:
@@ -178,6 +177,10 @@ def main():
     tic = time.time()
     assert os.path.exists(task.traj_filepath), f"Trajectory file: {task.traj_filepath} does not exist."
     init_states, all_actions, all_states = get_traj(task, robot, env.handler)
+    mapping_json_path = os.path.join(
+        "./roboverse_demo/demo_isaaclab", f"{args.task}-Level{args.random.level}", f"robot-{args.robot}", "mapping.json"
+    )
+    init_states = reorder_init_states(init_states, mapping_json_path)
     num_demos = len(init_states)
     toc = time.time()
     log.trace(f"Time to load data: {toc - tic:.2f}s")
@@ -240,16 +243,10 @@ def main():
                 "rgb": obs.cameras["camera0"].rgb,
                 "joint_qpos": obs.robots[args.robot].joint_pos,
             }
-            if "head_cam" in policyRunner.yaml_cfg.task.shape_meta.obs.keys() and (
-                policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd"
-                or policyRunner.yaml_cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
-            ):
+            if use_rgbd(policyRunner.yaml_cfg):
                 new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
-            if (
-                "point_cloud" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-                or "pcds" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-            ):
+            if use_pcd(policyRunner.yaml_cfg):
                 depth = obs.cameras["camera0"].depth
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics
@@ -300,14 +297,12 @@ def main():
                     raise NotImplementedError("DEBUG")
 
                 new_obs["point_cloud"] = pnt_cloud
-                if "pcds" not in policyRunner.yaml_cfg.task.shape_meta.obs.keys():
-                    feat_dim = policyRunner.yaml_cfg.task.shape_meta.obs.point_cloud.shape[-1]
+                if not use_spUnet_pcd(policyRunner.yaml_cfg):
+                    feat_dim = get_pnt_cloud_feat_dim(policyRunner.yaml_cfg)
                     new_obs["point_cloud"] = new_obs["point_cloud"][..., :feat_dim]
 
-            if (
-                "franka_panda_leftfinger_touch_sensor_pred" in policyRunner.yaml_cfg.task.shape_meta.obs.keys()
-            ):
-                new_obs["sensors"] = obs.sensors # {sensor_name: {"force": Tensor[N_env, 3]}}
+            if use_sensor(policyRunner.yaml_cfg):
+                new_obs["sensors"] = obs.sensors  # {sensor_name: {"force": Tensor[N_env, 3]}}
 
             images_list.append(np.array(new_obs["rgb"].cpu()))
             # for key, value in new_obs.items():
@@ -357,6 +352,61 @@ def main():
         f.write(f"ckpt: {args.checkpoint_path}\n")
         f.write(f"random level: {args.random.level}\n")
     env.close()
+
+
+def use_rgbd(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return "head_cam" in cfg.task.shape_meta.obs.keys() and (
+            cfg.task.shape_meta.obs.head_cam.type == "rgbd" or cfg.task.shape_meta.obs.head_cam.type == "rgbd_resnet"
+        )
+    else:
+        keys = cfg.dataset.obs_keys.keys()
+        return "head_camera_depth" in keys
+
+
+def use_pcd(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return "point_cloud" in cfg.task.shape_meta.obs.keys() or "pcds" in cfg.task.shape_meta.obs.keys()
+    else:
+        keys = cfg.dataset.obs_keys.keys()
+        return "point_cloud" in keys or "pcds" in keys
+
+
+def use_dp3_pcd(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return "pcds" in cfg.task.shape_meta.obs.keys()
+    else:
+        keys = cfg.dataset.obs_keys.keys()
+        return "head_camera_pnt_cloud" in keys and cfg.dataset.obs_keys.head_camera_pnt_cloud.type == "spUnet"
+
+
+def use_spUnet_pcd(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return "point_cloud" in cfg.task.shape_meta.obs.keys()
+    else:
+        keys = cfg.dataset.obs_keys.keys()
+        return "head_camera_pnt_cloud" in keys and cfg.dataset.obs_keys.head_camera_pnt_cloud.type == "dp3"
+
+
+def use_sensor(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return "franka_panda_leftfinger_touch_sensor_pred" in cfg.task.shape_meta.obs.keys()
+    else:
+        keys = cfg.dataset.obs_keys.keys()
+        return "sensors" in keys
+
+
+def get_pnt_cloud_feat_dim(cfg):
+    task = cfg.get("task", None)
+    if task is not None:
+        return task.shape_meta.obs.point_cloud.shape[-1]
+    else:
+        return cfg.dataset.obs_keys.point_cloud.shape[-1]
 
 
 if __name__ == "__main__":

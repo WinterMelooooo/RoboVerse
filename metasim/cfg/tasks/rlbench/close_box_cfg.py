@@ -9,7 +9,7 @@ from .rlbench_task_cfg import RLBenchTaskCfg
 
 @configclass
 class CloseBoxCfg(RLBenchTaskCfg):
-    episode_length = 250
+    episode_length = 500
     objects = [
         ArticulationObjCfg(
             name="box_base",

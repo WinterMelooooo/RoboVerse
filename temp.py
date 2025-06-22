@@ -12,9 +12,7 @@ from roboverse_learn.algorithms.utils.visualizer import visualizer
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="从 ZARR 文件中随机抽取一个点云并可视化，保存为 .npy 文件"
-    )
+    parser = argparse.ArgumentParser(description="从 ZARR 文件中随机抽取一个点云并可视化，保存为 .npy 文件")
     parser.add_argument(
         "--zarr_path",
         type=str,
@@ -31,12 +29,8 @@ def main():
     parser.add_argument("--store_rgb", action="store_true", help="是否存储 RGB 通道")
     parser.add_argument("--store_depth", action="store_true", help="是否存储深度通道")
     parser.add_argument("--store_pnt_cloud", action="store_true", help="是否存储点云")
-    parser.add_argument(
-        "--seed", type=int, default=None, help="随机种子（可选），以便复现"
-    )
-    parser.add_argument(
-        "--calculate_mean_std", action="store_true", help="是否计算深度的均值和标准差"
-    )
+    parser.add_argument("--seed", type=int, default=None, help="随机种子（可选），以便复现")
+    parser.add_argument("--calculate_mean_std", action="store_true", help="是否计算深度的均值和标准差")
     parser.add_argument("--break_pnt_cloud", action="store_true", help="是否中断程序")
     parser.add_argument("--get_bounding_box", action="store_true", help="是否获取点云的边界框")
     args = parser.parse_args()
@@ -61,7 +55,7 @@ def main():
     depths = root["data"]["head_camera_depth"]
     pnt_clouds = root["data"]["head_camera_pnt_cloud"]
     sensors_group = root["data"]["sensors"]
-    sensor_names = list(sensors_group.array_keys())   # 或者 keys()
+    sensor_names = list(sensors_group.array_keys())  # 或者 keys()
     episode_ends = root["meta"]["episode_ends"]
 
     print(f"len(head_cams): {len(head_cams)}")
@@ -69,7 +63,7 @@ def main():
     print(f"len(pnt_clouds): {len(pnt_clouds)}")
     print(f"len(episode_ends): {len(episode_ends)}")
     for name in sensor_names:
-        dataset = sensors_group[name]      # 这是一个 zarr.core.Array
+        dataset = sensors_group[name]  # 这是一个 zarr.core.Array
         print(name, "has", len(dataset), "entries")
         print(f"last data: {dataset[-1]}")
         print(f"last second data: {dataset[-2]}")
@@ -90,9 +84,7 @@ def main():
         depth_max = depth_exp.max().item()
         depth_min = depth_exp.min().item()
         print(f"head_camera_depth min: {depth_min}, max: {depth_max}")
-        depth_norm = (depth_exp - depth_min) / (
-            depth_max - depth_min
-        )  # 先归一化到 [0,1]
+        depth_norm = (depth_exp - depth_min) / (depth_max - depth_min)  # 先归一化到 [0,1]
         output_dir = os.path.join(depth_dir, "0.png")
         iio.imwrite(
             output_dir,
@@ -105,9 +97,7 @@ def main():
         try:
             pcd_dataset = root["data"]["head_camera_pnt_cloud"]
         except KeyError:
-            raise KeyError(
-                f"在 ZARR 路径 {args.zarr_path} 中未找到 data/head_camera_pnt_cloud 数据集"
-            )
+            raise KeyError(f"在 ZARR 路径 {args.zarr_path} 中未找到 data/head_camera_pnt_cloud 数据集")
 
         # dataset 的第一个维度是样本数量，每个样本形状为 (N,3) 或 (N,6)
         total = len(pcd_dataset)
@@ -130,12 +120,11 @@ def main():
                 sum_min += min_vals
                 sum_max += max_vals
                 count += 1
+            if args.break_pnt_cloud:
+                break
+
         if args.get_bounding_box:
-            print(
-                f"点云数据集的总边界框：\n"
-                f"最小值: {sum_min / count}\n"
-                f"最大值: {sum_max / count}"
-            )
+            print(f"点云数据集的总边界框：\n最小值: {sum_min / count}\n最大值: {sum_max / count}")
         # 可视化
         print(f"可视化第 {idx} 个点云（共 {total} 个样本）")
         visualizer.visualize_pointcloud(your_pointcloud)
@@ -143,9 +132,9 @@ def main():
     # 假设点云存储在 group 'data' 下的 dataset 'head_camera_pnt_cloud'
     if args.calculate_mean_std:
         depths = depths[:, :1, :, :]
-        assert (
-            depths.shape[1] == 1 and depths.shape[2] == 256 and depths.shape[3] == 256
-        ), "depths shape should be (N, 1, H, W)"
+        assert depths.shape[1] == 1 and depths.shape[2] == 256 and depths.shape[3] == 256, (
+            "depths shape should be (N, 1, H, W)"
+        )
         min_d = depths.min(axis=(1, 2, 3), keepdims=True)
         max_d = depths.max(axis=(1, 2, 3), keepdims=True)
         depths_norm = (depths - min_d) / (max_d - min_d)  # [0,1]

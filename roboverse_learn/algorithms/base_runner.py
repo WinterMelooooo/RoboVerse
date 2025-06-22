@@ -5,7 +5,8 @@ try:
     from pytorch3d import transforms
 
     from metasim.utils.kinematics_utils import get_curobo_models
-except ImportError:
+except ImportError as e:
+    print(e)
     pass
 
 import torch
@@ -15,6 +16,7 @@ try:
 except ImportError:
     pass
 from loguru import logger as log
+from termcolor import cprint
 
 from metasim.cfg.scenario import ScenarioCfg
 
@@ -192,7 +194,10 @@ class PolicyRunner:
                 curr_action = self.action_cache.pop(0)
 
         self.step += 1
-        assert curr_action.shape == (self.num_envs, len(self.scenario.robots[0].joint_limits.keys())), (
+        assert curr_action.shape == (
+            self.num_envs,
+            len(self.scenario.robots[0].joint_limits.keys()),
+        ), (
             f"Expected num_envs X n_dof : {self.num_envs} X {len(self.scenario.robots[0].joint_limits.keys())}, got {curr_action.shape} instead"
         )
 

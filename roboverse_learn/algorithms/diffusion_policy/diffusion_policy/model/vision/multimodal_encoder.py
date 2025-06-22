@@ -200,8 +200,6 @@ class MultiModalEncoder(ModuleAttrMixin):
             # print(f"{key}: {features[-1].device}")
 
         # Dropout
-        if self.training:
-            raise ValueError("Should be eval!")
         if self.training and torch.rand((), device=device) < self.dropout:
             if torch.rand((), device=device) < 0.5:
                 img_features = [f * 0.0 for f in img_features]

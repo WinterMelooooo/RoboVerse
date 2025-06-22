@@ -219,7 +219,7 @@ class RobotPointCloudDataset(BaseImageDataset):
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
-            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)# B, T, 4096, 6
+            point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATE, device)[...,6]# B, T, 4096, 6
             if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == 6):
                 raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)")
         B, T, N, C = point_cloud.shape
