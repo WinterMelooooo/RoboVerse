@@ -211,7 +211,6 @@ class RobotPointCloudDataset(BaseImageDataset):
         agent_pos = samples["state"].to(device, non_blocking=True)
         action = samples["action"].to(device, non_blocking=True)
         point_cloud = samples["head_camera_pnt_cloud"].to(device, non_blocking=True)
-        print(f"point_cloud.shape = {point_cloud.shape}")
         if not self.norm_pnt_cloud:
             # Transform the origin of the point cloud to robot root
             point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)[...,:6]# B, T, 4096, 6
