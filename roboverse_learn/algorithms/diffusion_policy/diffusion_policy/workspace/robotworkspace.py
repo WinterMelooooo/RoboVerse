@@ -266,7 +266,7 @@ class RobotWorkspace(BaseWorkspace):
 
                 # update ema
                 if cfg.training.use_ema:
-                    ema.step(model)
+                    ema.step(model.module)
 
                 # logging
                 raw_loss_cpu = raw_loss.item()

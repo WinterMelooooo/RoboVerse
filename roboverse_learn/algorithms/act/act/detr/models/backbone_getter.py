@@ -28,7 +28,6 @@ def get_dp3(hidden_dim, **encoder_args):
     position_embedding = PositionEmbeddingPcd(hidden_dim=hidden_dim)
     position_embedding = nn.Sequential(
         position_embedding,
-        Rearrange("b n d -> b d 1 n"),
     )
     model = PcdJoiner(encoder, position_embedding)
     model.num_channels = encoder.out_channels
