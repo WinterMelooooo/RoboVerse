@@ -1,11 +1,11 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=LiberoPickOrangeJuice
 level=0
-config_name=robot_dp_pntcloud_spUnet
-num_epochs=2000
-port=50039
+config_name=robot_dp_test_rgbd
+num_epochs=300
+port=50042
 seed=42
-gpus=0,1,2,3
+gpus=0,1
 strategy=sqrt
 train_ratio=100
 logger=wandb

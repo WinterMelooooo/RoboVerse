@@ -1,7 +1,7 @@
 defaults:
   - _self_
 
-encoder_name: RGB_ResNet18
+encoder_name: DP3
 
 name: robot_${task_name}
 _target_: act.workspace.robotworkspace.RobotWorkspace
@@ -22,7 +22,7 @@ dataset:
     - head_camera
   batch_size_train: 8
   batch_size_val: 8
-  state_dim: 9         # --state_dim
+  state_dim: 9
   obs_keys:
     head_camera:
       shape: [3, 256, 256]
@@ -32,6 +32,9 @@ dataset:
     action:
       shape:
         - ${dataset.state_dim}
+    head_camera_pnt_cloud:
+      shape: [4096, 3]
+
 
 
 
@@ -43,12 +46,8 @@ policy:
     state_dim: ${dataset.state_dim}         # --state_dim
     kl_weight: 10
     # backbone
-    position_embedding: ${policy.params.backbone_cfg.positional_encoding_args.position_embedding}  # --position_embedding
     camera_names: ${dataset.camera_names}        # --camera_names
-    lr_backbone: ${policy.params.backbone_cfg.lr_backbone}  # --lr_backbone
-    masks: ${policy.params.backbone_cfg.masks}            # --masks
-    backbone_name: ${policy.params.backbone_cfg.backbone_name}  # --backbone_name
-    dilation: ${policy.params.backbone_cfg.dilation}  # --dilation
+    lr_backbone: 1e-5  # --lr_backbone
 
     # transformer
     enc_layers: 4           # --enc_layers
@@ -59,16 +58,16 @@ policy:
     nheads: 8               # --nheads
     num_queries: 100        # --num_queries
     pre_norm: false         # --pre_norm
-    masks: ${policy.params.backbone_cfg.masks}            # --masks
-    backbone_cfg:
-      _target_: detr.models.backbone_getter.get_resnet
-      lr_backbone: 1e-5
-      masks: false
-      backbone_name: resnet18
-      dilation: false
-      positional_encoding_args:
-        hidden_dim: ${policy.params.hidden_dim}  # --hidden_dim
-        position_embedding: sine
+    backbone:
+      _target_: act.detr.models.backbone_getter.get_dp3
+      hidden_dim: ${policy.params.hidden_dim}  # --hidden_dim
+      in_channels: 3
+      out_channels: 256
+      use_layernorm: true
+      final_norm: layernorm # layernorm, none
+      normal_channel: false
+
+
 policy_runner:
   action:
     action_type: "joint_pos"

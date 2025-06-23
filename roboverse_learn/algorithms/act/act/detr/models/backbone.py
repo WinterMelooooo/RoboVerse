@@ -10,6 +10,7 @@ import IPython
 import torch
 import torch.nn.functional as F
 import torchvision
+import hydra
 from act.detr.util.misc import NestedTensor, is_main_process
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
@@ -91,9 +92,12 @@ class BackboneBase(nn.Module):
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
         self.num_channels = num_channels
 
-    def forward(self, tensor):
+    def forward(self, obs):
+        tensor = obs["head_camera"]
         xs = self.body(tensor)
-        return xs
+        feature, pos = xs
+
+        return feature[0], pos[0]
         # out: Dict[str, NestedTensor] = {}
         # for name, x in xs.items():
         #     m = tensor_list.mask
@@ -137,14 +141,16 @@ class Joiner(nn.Sequential):
 
         return out, pos
 
+class PcdJoiner(nn.Sequential):
+    def __init__(self, backbone, position_embedding):
+        super().__init__(backbone, position_embedding)
+
+    def forward(self, obs):
+        pcd = obs["head_camera_pnt_cloud"]
+        x = self[0](pcd)
+        pos = self[1](pcd)
+        return x, pos
+
 
 def build_backbone(args):
-    position_embedding = build_position_encoding(args)
-    train_backbone = args.lr_backbone > 0
-    return_interm_layers = args.masks
-    backbone = Backbone(
-        args.backbone, train_backbone, return_interm_layers, args.dilation
-    )
-    model = Joiner(backbone, position_embedding)
-    model.num_channels = backbone.num_channels
-    return model
+    return args.backbone

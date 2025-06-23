@@ -1,8 +1,8 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 task_name=CloseBox
-level=2
-config_name=robot_act_rgb
-gpus=5
+level=0
+config_name=robot_act_dp3
+gpus=4,5,6,7
 port=50053
 num_epochs=2000
 seed=42

@@ -173,7 +173,7 @@ class PointNetEncoderXYZ(nn.Module):
             self.mlp[6].register_backward_hook(self.save_gradient)
 
         self.pool = lambda x: torch.max(x, 1)[0]  # max pooling
-
+        self.out_channels = out_channels
     def forward(self, x):
         x = self.mlp(x)
         x = self.pool(x)

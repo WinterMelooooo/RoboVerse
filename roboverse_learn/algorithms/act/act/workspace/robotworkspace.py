@@ -16,7 +16,7 @@ from act.workspace.base_workspace import BaseWorkspace
 from einops import rearrange
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
+from act.utils import dict_apply
 from ..constants import DT, PUPPET_GRIPPER_JOINT_OPEN
 from ..policy import ACTPolicy, CNNMLPPolicy
 from ..utils import (  # helper functions
@@ -80,6 +80,7 @@ class RobotWorkspace(BaseWorkspace):
             cfg.dataset.batch_size_val,
             seed=cfg.training.seed,
             keys=cfg.dataset.obs_keys,
+            task_name=cfg.task_name.split("_")[0],
         )
 
         # save dataset stats
@@ -97,7 +98,7 @@ class RobotWorkspace(BaseWorkspace):
         num_epochs = cfg.training.num_epochs
         policy = self.policy
         optimizer = policy.configure_optimizers()
-        DDP(
+        policy = DDP(
             policy,
             device_ids=[local_rank],
             output_device=local_rank,
@@ -192,14 +193,8 @@ class RobotWorkspace(BaseWorkspace):
         return best_ckpt_info
 
     def forward_pass(self, data, policy):
-        image_data, qpos_data, action_data, is_pad = data
-        image_data, qpos_data, action_data, is_pad = (
-            image_data.cuda(),
-            qpos_data.cuda(),
-            action_data.cuda(),
-            is_pad.cuda(),
-        )
-        return policy(qpos_data, image_data, action_data, is_pad)
+        data = dict_apply(data, lambda x: x.cuda())
+        return policy(data)
 
     def plot_history(
         self, train_history, validation_history, num_epochs, ckpt_dir, seed

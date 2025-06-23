@@ -1,7 +1,7 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export CUDA_VISIBLE_DEVICES=6
-ckpt=./info/outputs/ACT/2025.06.22/04.46.18_RGB_ResNet18_CloseBoxFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/best.ckpt
-task=CloseBox
+export CUDA_VISIBLE_DEVICES=0
+ckpt=info/outputs/ACT/2025.06.22/06.59.54_RGB_ResNet18_StackCubeFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/best.ckpt
+task=StackCube
 num_envs=1
 random_level=2
 task_id_range_low=0

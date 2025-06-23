@@ -98,6 +98,51 @@ class PositionEmbeddingLearned(nn.Module):
         return pos
 
 
+class PositionEmbeddingPcd(nn.Module):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+    def forward(self, coord, temperature=10000, normalize=False, scale=None):
+
+        num_pos_feats = self.hidden_dim // 3
+        num_pad_feats = self.hidden_dim - num_pos_feats * 3
+
+        x_embed = coord[..., 0:1] # [M, 1]
+        y_embed = coord[..., 1:2]
+        z_embed = coord[..., 2:3]
+
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        if scale is None:
+            scale = 2 * torch.pi
+
+        if normalize:
+            eps = 1e-6
+            x_embed = coord[..., 0] / (coord[:, 0].max() + eps) * scale
+            y_embed = coord[..., 1] / (coord[:, 1].max() + eps) * scale
+            z_embed = coord[..., 2] / (coord[:, 2].max() + eps) * scale
+
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=coord.device)
+        dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
+
+        pos_x = x_embed[..., None] / dim_t
+        pos_y = y_embed[..., None] / dim_t
+        pos_z = z_embed[..., None] / dim_t
+        pos_x = torch.stack(
+            (pos_x[..., 0::2].sin(), pos_x[..., 1::2].cos()), dim=2
+        ).flatten(1)
+        pos_y = torch.stack(
+            (pos_y[..., 0::2].sin(), pos_y[..., 1::2].cos()), dim=2
+        ).flatten(1)
+        pos_z = torch.stack(
+            (pos_z[..., 0::2].sin(), pos_z[..., 1::2].cos()), dim=2
+        ).flatten(1)
+        pos = torch.cat((pos_x, pos_y, pos_z), dim=-1)
+
+        pos = torch.cat((pos, torch.zeros_like(pos)[:, :num_pad_feats]), dim=-1)
+        return pos
+
 def build_position_encoding(args):
     N_steps = args.hidden_dim // 2
     if args.position_embedding in ("v2", "sine"):

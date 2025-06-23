@@ -77,13 +77,6 @@ class RobotWorkspace(BaseWorkspace):
         # configure model
         self.model: DiffusionUnetImagePolicy = hydra.utils.instantiate(cfg.policy)
         self.model.to(device)
-        if self.world_size > 1:
-            DDP(
-                self.model,
-                device_ids=[self.local_rank],
-                output_device=self.local_rank,
-                find_unused_parameters=False,
-            )
         self.ema_model: DiffusionUnetImagePolicy = None
         if cfg.training.use_ema:
             self.ema_model = copy.deepcopy(self.model)
@@ -101,8 +94,16 @@ class RobotWorkspace(BaseWorkspace):
         self.best_epoch = 0
 
     def run(self):
+        if self.world_size > 1:
+            model = DDP(
+                self.model,
+                device_ids=[self.local_rank],
+                output_device=self.local_rank,
+                find_unused_parameters=False,
+            )
+        else:
+            model = self.model
         cfg = copy.deepcopy(self.cfg)
-        model = self.model
         # configure dataset
         dataset: BaseImageDataset
         dataset = hydra.utils.instantiate(cfg.task.dataset)

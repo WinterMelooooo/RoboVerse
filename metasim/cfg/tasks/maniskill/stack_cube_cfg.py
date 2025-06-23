@@ -13,7 +13,7 @@ class StackCubeCfg(ManiskillTaskCfg):
     The robot is tasked to pick up a cube and stack it on another cube.
     """
 
-    episode_length = 250
+    episode_length = 500
     objects = [
         PrimitiveCubeCfg(
             name="cube",
