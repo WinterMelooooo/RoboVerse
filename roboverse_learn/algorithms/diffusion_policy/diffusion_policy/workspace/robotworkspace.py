@@ -94,15 +94,13 @@ class RobotWorkspace(BaseWorkspace):
         self.best_epoch = 0
 
     def run(self):
-        if self.world_size > 1:
-            model = DDP(
-                self.model,
-                device_ids=[self.local_rank],
-                output_device=self.local_rank,
-                find_unused_parameters=False,
-            )
-        else:
-            model = self.model
+        model = DDP(
+            self.model,
+            device_ids=[self.local_rank],
+            output_device=self.local_rank,
+            find_unused_parameters=False,
+        )
+
         cfg = copy.deepcopy(self.cfg)
         # configure dataset
         dataset: BaseImageDataset
@@ -158,7 +156,7 @@ class RobotWorkspace(BaseWorkspace):
                 print(f"Resuming from checkpoint {lastest_ckpt_path}")
                 self.load_checkpoint(path=lastest_ckpt_path)
 
-        model.set_normalizer(normalizer)
+        model.module.set_normalizer(normalizer)
         if cfg.training.use_ema:
             self.ema_model.set_normalizer(normalizer)
         # configure ema
@@ -228,8 +226,8 @@ class RobotWorkspace(BaseWorkspace):
             step_log = dict()
             # ========= train for this epoch ==========
             if cfg.training.freeze_encoder:
-                model.obs_encoder.eval()
-                model.obs_encoder.requires_grad_(False)
+                model.module.obs_encoder.eval()
+                model.module.obs_encoder.requires_grad_(False)
 
             train_losses = list()
             if self.local_rank == 0:
@@ -254,9 +252,9 @@ class RobotWorkspace(BaseWorkspace):
                 # pprint(batch)
                 # compute loss
                 if hasattr(self, "gt_before_epoch"):
-                    raw_loss = model.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
+                    raw_loss = model.module.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
                 else:
-                    raw_loss = model.compute_loss(batch)
+                    raw_loss = model.module.compute_loss(batch)
                 loss = raw_loss / cfg.training.gradient_accumulate_every
                 loss.backward()
 
@@ -307,7 +305,7 @@ class RobotWorkspace(BaseWorkspace):
             step_log["train_loss"] = train_loss
 
             # ========= eval for this epoch ==========
-            policy = model
+            policy = model.module
             if cfg.training.use_ema:
                 policy = self.ema_model
             policy.eval()
@@ -334,9 +332,9 @@ class RobotWorkspace(BaseWorkspace):
                     for batch_idx, batch in enumerate(tepoch):
                         batch = dataset.postprocess(batch, device)
                         if hasattr(self, "gt_before_epoch"):
-                            loss = model.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
+                            loss = model.module.compute_loss(batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch)
                         else:
-                            loss = model.compute_loss(batch)
+                            loss = model.module.compute_loss(batch)
                         val_losses.append(loss)
                         if (cfg.training.max_val_steps is not None) and batch_idx >= (
                             cfg.training.max_val_steps - 1
