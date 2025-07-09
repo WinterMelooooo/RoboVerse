@@ -44,12 +44,12 @@ class PolicyRunner:
         raise NotImplementedError
 
     def __post_init__(self):
-        if self.policy_cfg.action_config.action_type == "ee":
+        if self.policy_cfg.action_config.action_type == "ee":  # We do not use end-effector control
             *_, self.robot_ik = get_curobo_models(self.scenario.robots[0])
             self.curobo_n_dof = len(self.robot_ik.robot_config.cspace.joint_names)
             self.ee_n_dof = len(self.scenario.robots[0].gripper_open_q)
 
-        if self.policy_cfg.action_config.temporal_agg:
+        if self.policy_cfg.action_config.temporal_agg:  # We do not use temporal aggregation
             self.all_time_actions = torch.zeros(
                 [
                     self.num_envs,
@@ -236,7 +236,7 @@ class PolicyRunner:
             seed_config=seed_config.cuda(0),
         )
 
-        if self.policy_cfg.action_config.ee_cfg.gripper_rep == "strength":
+        if self.policy_cfg.action_config.ee_cfg.gripper_rep == "strength":  # We do not use gripper strength
             gripper_pos = 1 - action[:, -1]
             gripper_widths = torch.zeros(self.num_envs, self.ee_n_dof, device=self.device)
             for i in range(self.num_envs):

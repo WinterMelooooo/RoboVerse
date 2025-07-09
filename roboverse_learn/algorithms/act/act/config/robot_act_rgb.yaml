@@ -43,12 +43,12 @@ policy:
     state_dim: ${dataset.state_dim}         # --state_dim
     kl_weight: 10
     # backbone
-    position_embedding: ${policy.params.backbone_cfg.positional_encoding_args.position_embedding}  # --position_embedding
+    position_embedding: ${policy.params.backbone.positional_encoding_args.position_embedding}  # --position_embedding
     camera_names: ${dataset.camera_names}        # --camera_names
-    lr_backbone: ${policy.params.backbone_cfg.lr_backbone}  # --lr_backbone
-    masks: ${policy.params.backbone_cfg.masks}            # --masks
-    backbone_name: ${policy.params.backbone_cfg.backbone_name}  # --backbone_name
-    dilation: ${policy.params.backbone_cfg.dilation}  # --dilation
+    lr_backbone: ${policy.params.backbone.lr_backbone}  # --lr_backbone
+    masks: ${policy.params.backbone.masks}            # --masks
+    backbone_name: ${policy.params.backbone.backbone_name}  # --backbone_name
+    dilation: ${policy.params.backbone.dilation}  # --dilation
 
     # transformer
     enc_layers: 4           # --enc_layers
@@ -59,9 +59,8 @@ policy:
     nheads: 8               # --nheads
     num_queries: 100        # --num_queries
     pre_norm: false         # --pre_norm
-    masks: ${policy.params.backbone_cfg.masks}            # --masks
-    backbone_cfg:
-      _target_: detr.models.backbone_getter.get_resnet
+    backbone:
+      _target_: act.detr.models.backbone_getter.get_resnet
       lr_backbone: 1e-5
       masks: false
       backbone_name: resnet18

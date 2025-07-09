@@ -9,6 +9,7 @@ from .base_policy import (
     BasePolicyCfg,
     DiffusionPolicyCfg,
     EndEffectorCfg,
+    MLPPolicyCfg,
     ObsCfg,
     VLAPolicyCfg,
 )

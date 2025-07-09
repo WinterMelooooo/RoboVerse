@@ -18,9 +18,13 @@ class ACTPolicy(nn.Module):
         print(f"KL Weight {self.kl_weight}")
 
     def __call__(self, obs):
-        qpos = obs["state"]
-        image = obs["head_camera"]
-        actions = obs.get("actions", None)
+        qpos = obs.get("state", None)
+        if qpos is None:
+            qpos = obs.get("agent_pos", None)
+        image = obs.get("head_camera", None)
+        if image is None:
+            image = obs.get("head_cam", None)
+        actions = obs.get("action", None)
         is_pad = obs.get("is_pad", None)
         env_state = None
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -30,7 +34,7 @@ class ACTPolicy(nn.Module):
             is_pad = is_pad[:, : self.model.num_queries]
             obs["state"] = qpos
             obs["head_camera"] = image
-            obs["actions"] = actions
+            obs["action"] = actions
             obs["is_pad"] = is_pad
             obs["env_state"] = env_state
             a_hat, is_pad_hat, (mu, logvar) = self.model(obs)
@@ -45,7 +49,7 @@ class ACTPolicy(nn.Module):
         else:  # inference time
             obs["qpos"] = qpos
             obs["image"] = image
-            obs["actions"] = None
+            obs["action"] = None
             obs["is_pad"] = None
             obs["env_state"] = env_state
             a_hat, _, (_, _) = self.model(obs)  # no action, sample from prior

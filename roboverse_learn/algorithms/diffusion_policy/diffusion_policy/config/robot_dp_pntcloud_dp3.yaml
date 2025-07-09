@@ -93,14 +93,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 128
+  batch_size: 32
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 128
+  batch_size: 32
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -108,7 +108,7 @@ val_dataloader:
 
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 5.0e-5
+  lr: 2.5e-5
   betas: [0.95, 0.999]
   eps: 1.0e-8
   weight_decay: 1.0e-6
@@ -126,7 +126,7 @@ training:
   gradient_accumulate_every: 1
   use_ema: True
   rollout_every: 50
-  checkpoint_every: 1000
+  checkpoint_every: 2000
   val_every: 1
   sample_every: 5
   max_train_steps: null

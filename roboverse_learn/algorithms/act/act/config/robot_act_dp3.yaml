@@ -12,6 +12,8 @@ exp_name: "default"
 training:
   seed: 42
   num_epochs: 2000
+  lr_scheduler: cosine
+  lr_warmup_steps: 5000
   checkpoint_every: 1000
   output_dir: ""
 
@@ -20,8 +22,8 @@ dataset:
   num_episodes: 100
   camera_names:
     - head_camera
-  batch_size_train: 8
-  batch_size_val: 8
+  batch_size_train: 2
+  batch_size_val: 2
   state_dim: 9
   obs_keys:
     head_camera:
@@ -34,25 +36,26 @@ dataset:
         - ${dataset.state_dim}
     head_camera_pnt_cloud:
       shape: [4096, 3]
-
-
+  voxel_pnt_cloud: False
+  pnt_dim: 3
+  transform_pcd: null
 
 
 policy:
   _target_: act.policy.ACTPolicy
   params:
-    lr: 1e-5                # --lr
-    weight_decay: 1e-4      # --weight_decay
+    lr: 5e-5                # --lr
+    weight_decay: 0.05     # --weight_decay
     state_dim: ${dataset.state_dim}         # --state_dim
     kl_weight: 10
     # backbone
     camera_names: ${dataset.camera_names}        # --camera_names
-    lr_backbone: 1e-5  # --lr_backbone
+    lr_backbone: 5e-5  # --lr_backbone
 
     # transformer
     enc_layers: 4           # --enc_layers
     dec_layers: 7           # --dec_layers
-    dim_feedforward: 3200   # --dim_feedforward
+    dim_feedforward: 32   # --dim_feedforward
     hidden_dim: 512         # --hidden_dim
     dropout: 0.1            # --dropout
     nheads: 8               # --nheads
@@ -62,7 +65,7 @@ policy:
       _target_: act.detr.models.backbone_getter.get_dp3
       hidden_dim: ${policy.params.hidden_dim}  # --hidden_dim
       in_channels: 3
-      out_channels: 256
+      out_channels: 64
       use_layernorm: true
       final_norm: layernorm # layernorm, none
       normal_channel: false

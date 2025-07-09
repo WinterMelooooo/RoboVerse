@@ -98,17 +98,35 @@ class PositionEmbeddingLearned(nn.Module):
         return pos
 
 
+class BatchedPcdPositionEmbedding(nn.Module):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.pe = PositionEmbeddingPcd(hidden_dim)
+        self.hidden_dim = hidden_dim
+
+    def forward(self, coords: torch.Tensor):
+        # coords: (B, N, 3)
+        B, N, _ = coords.shape
+        # 1) 拉平到 (B*N, 3)
+        flat = coords.view(-1, 3)
+        # 2) 计算位置编码 -> (B*N, hidden_dim)
+        flat_pos = self.pe(flat)
+        # 3) reshape 回 (B, N, hidden_dim)
+        batched = flat_pos.view(B, N, self.hidden_dim)
+        # 4) 转成 (B, hidden_dim, 1, N)
+        return batched.permute(0, 2, 1).unsqueeze(2)[:1]
+
+
 class PositionEmbeddingPcd(nn.Module):
     def __init__(self, hidden_dim):
         super().__init__()
         self.hidden_dim = hidden_dim
 
     def forward(self, coord, temperature=10000, normalize=False, scale=None):
-
-        num_pos_feats = self.hidden_dim // 3
+        num_pos_feats = (self.hidden_dim // 3) // 2 * 2
         num_pad_feats = self.hidden_dim - num_pos_feats * 3
 
-        x_embed = coord[..., 0:1] # [M, 1]
+        x_embed = coord[..., 0:1]  # [B, N, 1]
         y_embed = coord[..., 1:2]
         z_embed = coord[..., 2:3]
 
@@ -142,6 +160,7 @@ class PositionEmbeddingPcd(nn.Module):
 
         pos = torch.cat((pos, torch.zeros_like(pos)[:, :num_pad_feats]), dim=-1)
         return pos
+
 
 def build_position_encoding(args):
     N_steps = args.hidden_dim // 2

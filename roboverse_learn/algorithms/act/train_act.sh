@@ -18,6 +18,7 @@ delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 m
 config_name=${9:-"robot_act_rgb"}
 master_port=${10:-50023}
 seed=${11:-42}
+backend=${12:-"Gloo"}
 
 extra="obs:${obs_space}_act:${act_space}"
 if [ "${delta_ee}" = 1 ]; then
@@ -29,6 +30,10 @@ fi
 echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
 echo -e "master port: ${master_port}"
 echo -e "seed: ${seed}"
+if [ "${backend,,}" = "nccl" ]; then
+  echo "Using NCCL backend, enabling NCCL debug and parallel launch mode"
+  export NCCL_LAUNCH_MODE=PARALLEL
+fi
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
@@ -39,3 +44,4 @@ dataset.dataset_dir="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" 
 training.num_epochs=${num_epochs} \
 training.seed=${seed} \
 dataset.num_episodes=${expert_data_num} \
+++backend=${backend} \

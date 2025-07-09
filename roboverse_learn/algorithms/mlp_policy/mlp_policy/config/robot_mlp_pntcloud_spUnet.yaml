@@ -1,0 +1,151 @@
+defaults:
+  - _self_
+  - task: default_task_pntcloud_spUnet
+
+name: robot_${task.name}
+_target_: mlp_policy.workspace.robotworkspace.RobotWorkspace
+
+encoder_name: PntCloud_spUnet
+
+task_name: ${task.name}
+shape_meta: ${task.shape_meta}
+exp_name: "default"
+
+horizon: 1
+n_obs_steps: 1
+n_action_steps: 1
+n_latency_steps: 0
+dataset_obs_steps: ${n_obs_steps}
+keypoint_visible_rate: 1.0
+
+policy_runner:
+  action:
+    action_type: "ee"
+    ee_cfg:
+      rotation_rep: "quaternion"
+      gripper_rep: "q_pos"
+    delta: False
+  obs:
+    obs_type: "ee"
+    ee_cfg:
+      rotation_rep: "quaternion"
+      gripper_rep: "q_pos"
+
+
+
+policy:
+  _target_: mlp_policy.policy.spUnet_pcd_policy.spUnetPcdPolicy
+  shape_meta: ${shape_meta}
+
+  obs_encoder:
+    _target_: mlp_policy.model.vision.pcd_obs_encoder.PCDObsEncoder
+    shape_meta: ${shape_meta}
+    pcd_model:
+      _target_: mlp_policy.model.vision.model_getter.get_spUnet
+      in_channels: 6
+      num_classes: 0
+      pretrained_path: null
+    share_pcd_model: true
+    n_obs_steps: ${n_obs_steps}
+    pcd_nsample: 16
+    pcd_npoints: 2048
+    use_mask: false
+    bg_ratio: 0.0
+    pcd_hidden_dim: 96
+    projector_layers: 2
+    projector_channels: [96, 128, 128]
+    test_rescale: False
+    name: ${task.name}
+
+  model:
+    _target_: mlp_policy.policy.mlp_getter.get_residual_action_regression_head
+    action_dim: ${shape_meta.action.shape.0}
+    input_dim: 137
+    hidden_dims: [1024, 512]
+    use_residual: True
+    dropout: 0.1
+
+ema:
+  _target_: mlp_policy.model.diffusion.ema_model.EMAModel
+  update_after_step: 0
+  inv_gamma: 1.0
+  power: 0.75
+  min_value: 0.0
+  max_value: 0.9999
+
+dataloader:
+  batch_size: 32
+  num_workers: 0
+  shuffle: True
+  pin_memory: True
+  persistent_workers: False
+
+val_dataloader:
+  batch_size: 32
+  num_workers: 0
+  shuffle: False
+  pin_memory: True
+  persistent_workers: False
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-6
+
+training:
+  device: "cuda:0"
+  seed: 42
+  debug: False
+  resume: True
+  tag: 0
+  output_dir: ""
+  # optimization
+  lr_scheduler: cosine
+  lr_warmup_steps: 5000
+  num_epochs: 1000
+  gradient_accumulate_every: 1
+  use_ema: False
+  freeze_encoder: False
+  rollout_every: 50
+  checkpoint_every: 2000
+  val_every: 5
+  sample_every: 5
+  # steps per epoch
+  max_train_steps: 250
+  max_val_steps: 250
+  # misc
+  tqdm_interval_sec: 1.0
+
+logging:
+  project: RoboVerse_MLP
+  resume: True
+  mode: online
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  tags: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  id: null
+  group: null
+
+checkpoint:
+  topk:
+    monitor_key: test_mean_score
+    mode: max
+    k: 5
+    format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
+  save_last_ckpt: True
+  save_last_snapshot: False
+  save_root_dir: info/outputs/MLP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+
+multi_run:
+  run_dir: info/outputs/MLP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+  wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: info/outputs/MLP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+  sweep:
+    dir: info/outputs/MLP/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+    subdir: ${hydra.job.num}

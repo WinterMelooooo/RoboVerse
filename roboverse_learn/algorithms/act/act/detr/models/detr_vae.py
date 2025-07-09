@@ -82,9 +82,11 @@ class DETRVAE(nn.Module):
         env_state: None
         actions: batch, seq, action_dim
         """
-        qpos = obs["qpos"]
-        env_state = obs["env_state"]
-        actions = obs.get("actions", None)
+        qpos = obs.get("state", None)
+        if qpos is None:
+            qpos = obs.get("agent_pos", None)
+        env_state = obs.get("env_state",None)
+        actions = obs.get("action", None)
         is_pad = obs.get("is_pad", None)
         is_training = actions is not None # train or val
         bs, _ = qpos.shape

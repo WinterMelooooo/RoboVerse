@@ -1,0 +1,126 @@
+defaults:
+  - _self_
+
+encoder_name: Fusion_DP3_Resnet
+
+name: robot_${task_name}
+_target_: act.workspace.robotworkspace.RobotWorkspace
+
+task_name: null
+exp_name: "default"
+
+training:
+  seed: 42
+  num_epochs: 2000
+  checkpoint_every: 1000
+  output_dir: ""
+
+dataset:
+  dataset_dir: null
+  num_episodes: 100
+  camera_names:
+    - head_camera
+  batch_size_train: 2
+  batch_size_val: 2
+  state_dim: 9
+  obs_keys:
+    head_camera:
+      shape: [3, 256, 256]
+    state:
+      shape:
+        - ${dataset.state_dim}
+    action:
+      shape:
+        - ${dataset.state_dim}
+    head_camera_pnt_cloud:
+      shape: [4096, 3]
+  voxel_pnt_cloud: False
+  pnt_dim: 3
+  transform_pcd: null
+
+
+policy:
+  _target_: act.policy.ACTPolicy
+  params:
+    lr: 5e-6                # --lr
+    weight_decay: 1e-4      # --weight_decay
+    state_dim: ${dataset.state_dim}         # --state_dim
+    kl_weight: 10
+    # backbone
+    camera_names: ${dataset.camera_names}        # --camera_names
+    lr_backbone: 5e-6  # --lr_backbone
+
+    # transformer
+    enc_layers: 4           # --enc_layers
+    dec_layers: 7           # --dec_layers
+    dim_feedforward: 3200   # --dim_feedforward
+    hidden_dim: 512         # --hidden_dim
+    dropout: 0.1            # --dropout
+    nheads: 8               # --nheads
+    num_queries: 100        # --num_queries
+    pre_norm: false         # --pre_norm
+    backbone:
+      _target_: act.detr.models.backbone_getter.get_multimodal_backbone
+      rgb_backbone:
+        _target_: act.detr.models.backbone_getter.get_resnet
+        lr_backbone: 1e-5
+        masks: false
+        backbone_name: resnet18
+        dilation: false
+        positional_encoding_args:
+          hidden_dim: 512
+          position_embedding: sine
+      pcd_backbone:
+        _target_: act.detr.models.backbone_getter.get_dp3
+        hidden_dim: ${policy.params.backbone.pcd_backbone.out_channels}  # --hidden_dim
+        in_channels: 3
+        out_channels: 256
+        use_layernorm: true
+        final_norm: layernorm # layernorm, none
+        normal_channel: false
+
+      proj_dim: 256
+      fusion_func_name: self_atten
+      num_heads: 8
+      hidden_dim: ${policy.params.hidden_dim}  # --hidden_dim
+
+
+policy_runner:
+  action:
+    action_type: "joint_pos"
+    delta: 0
+    action_dim: ${dataset.state_dim}
+    action_chunk_steps: ${policy.params.num_queries}
+  obs:
+    obs_type: "joint_pos"
+    obs_dim: ${dataset.state_dim}
+    obs_padding: 0
+
+
+logging:
+  project: RoboVerse_ACT
+  resume: True
+  mode: online
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  tags: ${now:%Y.%m.%d-%H.%M.%S}_${encoder_name}_${task_name}
+  id: null
+  group: null
+
+checkpoint:
+  topk:
+    monitor_key: test_mean_score
+    mode: max
+    k: 5
+    format_str: 'epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
+  save_last_ckpt: True
+  save_last_snapshot: False
+  save_root_dir: info/outputs/ACT/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+
+hydra:
+  job:
+    override_dirname: ${name}
+  run:
+    dir: info/outputs/ACT/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+  sweep:
+    dir: info/outputs/ACT/${now:%Y.%m.%d}/${now:%H.%M.%S}_${encoder_name}_${task_name}
+    subdir: ${hydra.job.num}

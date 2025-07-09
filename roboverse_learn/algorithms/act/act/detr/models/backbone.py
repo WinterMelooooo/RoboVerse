@@ -6,11 +6,11 @@ Backbone modules.
 from collections import OrderedDict
 from typing import Dict, List
 
+import hydra
 import IPython
 import torch
 import torch.nn.functional as F
 import torchvision
-import hydra
 from act.detr.util.misc import NestedTensor, is_main_process
 from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
@@ -95,9 +95,7 @@ class BackboneBase(nn.Module):
     def forward(self, obs):
         tensor = obs["head_camera"]
         xs = self.body(tensor)
-        feature, pos = xs
-
-        return feature[0], pos[0]
+        return xs
         # out: Dict[str, NestedTensor] = {}
         # for name, x in xs.items():
         #     m = tensor_list.mask
@@ -130,25 +128,48 @@ class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
-    def forward(self, tensor_list: NestedTensor):
-        xs = self[0](tensor_list)
-        out: List[NestedTensor] = []
-        pos = []
-        for name, x in xs.items():
-            out.append(x)
-            # position encoding
-            pos.append(self[1](x).to(x.dtype))
+    def forward(self, obs: Dict):
+        xs = self[0](obs)["0"]
+        pos = self[1](xs).to(xs.dtype)
+        return xs, pos
 
-        return out, pos
 
 class PcdJoiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
     def forward(self, obs):
-        pcd = obs["head_camera_pnt_cloud"]
+        pcd = obs.get("head_camera_pnt_cloud",None)
+        if pcd is None:
+            pcd = obs["point_cloud"]
         x = self[0](pcd)
         pos = self[1](pcd)
+        return x, pos
+
+class VoxelPcdJoiner(nn.Sequential):
+    def __init__(self, backbone, position_embedding):
+        super().__init__(backbone, position_embedding)
+
+    def forward(self, obs):
+        pcd = obs.get("head_camera_pnt_cloud",None)
+        if pcd is None:
+            pcd = obs["point_cloud"]
+        x = self[0](pcd)
+        pos = self[1](pcd["coords"])
+        return x, pos
+
+
+class MultiModalJoiner(nn.Sequential):
+    def __init__(self, backbone, position_embedding):
+        super().__init__(backbone, position_embedding)
+
+    def forward(self, obs):
+        x = self[0](obs)
+        rgb = obs["head_camera"]  # B, 3, H, W
+        pcd = obs["head_camera_pnt_cloud"]  # B, N, 3
+        rgb = rgb.flatten(2).transpose(1, 2)  # B, H*W, C
+        fused = torch.cat([rgb, pcd], dim=1)  # B, H*W+N, C
+        pos = self[1](fused)
         return x, pos
 
 

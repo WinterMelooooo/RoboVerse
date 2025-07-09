@@ -6,18 +6,19 @@ Reference:
 
 from collections import OrderedDict
 from functools import partial
+from typing import Dict, List, Tuple, Union
 
+import pointops
 import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
-from timm.models.layers import trunc_normal_
-from torch_geometric.utils import scatter
-from typing import Dict, List, Tuple, Union
+from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from einops import rearrange
 from roboverse_learn.algorithms.utils.sparse_tensor_utils import offset2batch
-from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from termcolor import cprint
-import pointops
+from timm.models.layers import trunc_normal_
+from torch_geometric.utils import scatter
+
 
 class PDBatchNorm(torch.nn.Module):
     def __init__(
@@ -415,6 +416,13 @@ class SpUNet(nn.Module):
         grid_coord = input_dict["grid_coord"]
         feat = input_dict["feat"]
         offset = input_dict["offset"]
+        need_reshape = False
+        if len(grid_coord.shape) == 3:
+            B, N, _ = grid_coord.shape
+            grid_coord = rearrange(grid_coord, "b n c -> (b n) c")
+            feat = rearrange(feat, "b n c -> (b n) c")
+            offset = rearrange(offset, "b n -> (b n)")
+            need_reshape = True
         condition = (
             input_dict["condition"][0]
             if "condition" in input_dict.keys()
@@ -435,6 +443,7 @@ class SpUNet(nn.Module):
         )
 
         batch = offset2batch(offset)
+
         sparse_shape = torch.add(torch.max(grid_coord, dim=0).values, 96).tolist()
         x = spconv.SparseConvTensor(
             features=feat,
@@ -463,6 +472,8 @@ class SpUNet(nn.Module):
             x = x.replace_feature(
                 scatter(x.features, x.indices[:, 0].long(), reduce="mean", dim=0)
             )
+        if need_reshape:
+            return rearrange(x.features, "(b n) c -> b n c", b=B, n=N)
         return x.features
 
 
@@ -650,10 +661,15 @@ class SpUnetEncoder(ModuleAttrMixin):
 
     def forward(self, pcd):
         if not isinstance(pcd, Dict):
-            cprint(f"Expecting pcd to be a Dict, got {type(pcd)}, assuming called in [get_output_shape()]", "red")
+            cprint(
+                f"Expecting pcd to be a Dict, got {type(pcd)}, assuming called in [get_output_shape()]",
+                "red",
+            )
             batch_size = pcd.shape[0]
             return torch.zeros(
-                (batch_size, self.projector_channels[-1]), dtype=self.dtype, device=self.device
+                (batch_size, self.projector_channels[-1]),
+                dtype=self.dtype,
+                device=self.device,
             )
         batch_size = None
         if batch_size is None:
@@ -662,8 +678,119 @@ class SpUnetEncoder(ModuleAttrMixin):
                 self.n_obs_steps,
             )
             batch_size = len(pcd["offset"])
-        assert list(pcd["feat"].shape[1:]) == list(self.shape[1:]), f"Expecting pcd['feat'] to have shape {list(self.shape[1:])}, got {list(pcd['feat'].shape[1:])}"
-        feature = self.encode_pcd(self.pcd_model,pcd)
+        assert list(pcd["feat"].shape[1:]) == list(self.shape[1:]), (
+            f"Expecting pcd['feat'] to have shape {list(self.shape[1:])}, got {list(pcd['feat'].shape[1:])}"
+        )
+        feature = self.encode_pcd(self.pcd_model, pcd)
         assert feature.shape[0] == batch_size, (feature.shape, batch_size)
         feature = feature.reshape(batch_size, -1)
         return feature
+
+
+class SpUnetACTEncoder(ModuleAttrMixin):
+    def __init__(self, backbone: SpUNet, pcd_npoints=4096):
+        super().__init__()
+        self.backbone = backbone
+        self.pcd_npoints = pcd_npoints
+
+    def forward(self, pcd_dict):
+        features = pcd_dict["feat"]
+        coord, features, offset, idx = self.pcd_sampling(
+            (pcd_dict["coord"], features, pcd_dict["offset"]),
+            return_index=True,
+        )
+
+        pcd_dict["coord"] = coord
+        pcd_dict["feat"] = features
+        pcd_dict["offset"] = offset
+        pcd_dict["grid_coord"] = pcd_dict["grid_coord"][idx.long()]
+        features = self.backbone(pcd_dict)
+        features = rearrange(
+            features,
+            "(b n) c -> b c 1 n",
+            n=self.pcd_npoints,
+        )
+        return features
+
+    def pcd_sampling(self, pxo, mask=None, return_index=False):
+        p, x, o = pxo  # (n, 3), (n, c), (b)
+
+        n_o, count = [self.pcd_npoints], self.pcd_npoints
+        for i in range(1, o.shape[0]):
+            count += self.pcd_npoints
+            n_o.append(count)
+        n_o = torch.tensor(n_o, dtype=torch.int32, device=o.device)
+
+        if "fps" in self.sampling:
+            if not self.use_mask or mask is None:
+                idx = pointops.farthest_point_sampling(p, o, n_o)  # (m)
+            else:
+                if self.bg_ratio > 0.0:
+                    fg_n_o, fg_count = (
+                        [self.pcd_npoints - int(self.pcd_npoints * self.bg_ratio)],
+                        self.pcd_npoints - int(self.pcd_npoints * self.bg_ratio),
+                    )
+                    for i in range(1, o.shape[0]):
+                        fg_count += self.pcd_npoints - int(
+                            self.pcd_npoints * self.bg_ratio
+                        )
+                        fg_n_o.append(fg_count)
+                    fg_n_o = torch.tensor(fg_n_o, dtype=torch.int32, device=o.device)
+                    bg_n_o, bg_count = (
+                        [int(self.pcd_npoints * self.bg_ratio)],
+                        int(self.pcd_npoints * self.bg_ratio),
+                    )
+                    for i in range(1, o.shape[0]):
+                        bg_count += int(self.pcd_npoints * self.bg_ratio)
+                        bg_n_o.append(bg_count)
+                    bg_n_o = torch.tensor(bg_n_o, dtype=torch.int32, device=o.device)
+                else:
+                    fg_n_o = n_o
+
+                fg_p = p[mask]
+                fg_o = []
+                count = 0
+                curr = 0
+                for i in range(o.shape[0]):
+                    count += mask[curr : o[i]].sum().item()
+                    curr = o[i]
+                    fg_o.append(count)
+                fg_o = torch.tensor(fg_o, dtype=torch.int32, device=o.device)
+                fg_idx = pointops.farthest_point_sampling(fg_p, fg_o, fg_n_o)  # (m)
+                if self.bg_ratio > 0.0:
+                    bg_p = p[~mask]
+                    bg_o = []
+                    count = 0
+                    curr = 0
+                    for i in range(o.shape[0]):
+                        count += (~mask[curr : o[i]]).sum().item()
+                        curr = o[i]
+                        bg_o.append(count)
+                    bg_o = torch.tensor(bg_o, dtype=torch.int32, device=o.device)
+                    bg_idx = pointops.farthest_point_sampling(bg_p, bg_o, bg_n_o)
+                    idx = torch.cat([fg_idx, bg_idx], dim=0)
+                else:
+                    idx = fg_idx
+        else:
+            raise NotImplementedError
+
+        n_p = p[idx.long(), :]  # (m, 3)
+        x, _ = pointops.knn_query_and_group(
+            x,
+            p,
+            offset=o,
+            new_xyz=n_p,
+            new_offset=n_o,
+            nsample=self.pcd_nsample,
+            with_xyz=True,
+        )
+
+        x = self.relu(
+            self.bn(self.linear(x).transpose(1, 2).contiguous())
+        )  # (m, c, nsample)
+        x = self.pool(x).squeeze(-1)  # (m, c)
+        p, o = n_p, n_o
+
+        if return_index:
+            return [p, x, o, idx]
+        return [p, x, o]

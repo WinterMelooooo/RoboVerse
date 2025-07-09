@@ -111,10 +111,12 @@ def build_ACT_model_and_optimizer(params):
     model.cuda()
 
     param_dicts = [
-        {"params": [p for n, p in model.named_parameters() if "backbone" not in n and p.requires_grad]},
+        {"params": [p for n, p in model.named_parameters() if "backbone" not in n and p.requires_grad],
+         "name": "default",},
         {
             "params": [p for n, p in model.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": params.lr_backbone,
+            "name": "backbone",
         },
     ]
     optimizer = torch.optim.AdamW(param_dicts, lr=params.lr, weight_decay=params.weight_decay)

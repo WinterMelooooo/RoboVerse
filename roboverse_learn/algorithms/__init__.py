@@ -21,5 +21,10 @@ def get_runner(algo: str) -> type[PolicyRunner]:
         from .act_runner import ACTRunner
 
         return ACTRunner
+
+    elif algo.lower() == "mlp":
+        from .mlp_runner import MLPRunner
+
+        return MLPRunner
     else:
         raise ValueError(f"Unknown algorithm: {algo}")

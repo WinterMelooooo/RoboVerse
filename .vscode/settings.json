@@ -265,4 +265,7 @@
         "${workspaceFolder}/third_party/IsaacLab2/_isaac_sim/exts/isaacsim.xr.openxr",
 
     ],
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": [],
 }

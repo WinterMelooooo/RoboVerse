@@ -1,31 +1,51 @@
-import sys
+import json
 import os
+import sys
+from typing import Callable, Dict
 
+import h5py
+import hydra
 import numpy as np
 import torch
-import h5py
-import json
+from PIL import Image
 from roboverse_learn.algorithms.diffusion_policy.diffusion_policy.dataset.robot_pointcloud_dataset import (
     ROBOT_ROOT_STATES,
     transform_point_cloud,
 )
+from roboverse_learn.algorithms.utils.transformpcd import ComposePCD
+from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data._utils.collate import default_collate
 
-from typing import Callable, Dict
-from torch.utils.data import TensorDataset, DataLoader
-from PIL import Image
-module_path = os.path.abspath(os.path.join(__file__, "../../../diffusion_policy/diffusion_policy/common"))
+module_path = os.path.abspath(
+    os.path.join(__file__, "../../../diffusion_policy/diffusion_policy/common")
+)
 sys.path.append(module_path)
 try:
     from replay_buffer import *
 except ImportError as e:
     print(f"trying to import from {module_path}")
     raise e
-from torch.utils.data.distributed import DistributedSampler
+from typing import Any, List
+
 import IPython
+from torch.utils.data.distributed import DistributedSampler
+
 e = IPython.embed
 
+
 class ZarrEpisodicRoboVerseDataset(torch.utils.data.Dataset):
-    def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats, keys=None, task_name=None):
+    def __init__(
+        self,
+        episode_ids,
+        dataset_dir,
+        camera_names,
+        norm_stats,
+        keys=None,
+        task_name=None,
+        voxel_pnt_cloud=False,
+        transform_pcd: List[Dict[str, Any]] = None,
+        pnt_dim=3,
+    ):
         super(ZarrEpisodicRoboVerseDataset).__init__()
         self.episode_ids = episode_ids
         self.dataset_dir = dataset_dir
@@ -34,19 +54,19 @@ class ZarrEpisodicRoboVerseDataset(torch.utils.data.Dataset):
         self.is_sim = False
         self.keys = keys if keys is not None else ["head_camera", "state", "action"]
         self.task_name = task_name
+        self.pnt_dim = pnt_dim
+        self.voxel_pnt_cloud = voxel_pnt_cloud
+        if self.voxel_pnt_cloud:
+            transform_pcd = hydra.utils.instantiate(transform_pcd)
+            self.transform_pcd = ComposePCD(transform_pcd)
         # Load zarr data
         zarr_path = dataset_dir
-        self.replay_buffer = ReplayBuffer.copy_from_path(
-            zarr_path,
-            keys=self.keys
-        )
-
+        self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=self.keys)
 
     def __len__(self):
         return len(self.episode_ids)
 
     def __getitem__(self, index):
-
         # Get episode id from the index
         episode_id = self.episode_ids[index]
 
@@ -80,23 +100,30 @@ class ZarrEpisodicRoboVerseDataset(torch.utils.data.Dataset):
     def _process_state_data(self, state_sequence, start_ts):
         state = state_sequence[start_ts]
         state_data = torch.from_numpy(state).float()
-        state_data = (state_data - self.norm_stats["state_mean"]) / self.norm_stats["state_std"]
+        state_data = (state_data - self.norm_stats["state_mean"]) / self.norm_stats[
+            "state_std"
+        ]
         return state_data
 
     def _process_action_data_and_pad(self, action_sequence, start_ts):
         action = action_sequence[start_ts:]
         action_len = len(action)
-        padded_action = np.zeros([self.norm_stats['max_episode_len'], action_sequence.shape[1]], dtype=np.float32)
+        padded_action = np.zeros(
+            [self.norm_stats["max_episode_len"], action_sequence.shape[1]],
+            dtype=np.float32,
+        )
         padded_action[:action_len] = action
-        is_pad = np.zeros(self.norm_stats['max_episode_len'])
+        is_pad = np.zeros(self.norm_stats["max_episode_len"])
         is_pad[action_len:] = 1
         action_data = torch.from_numpy(padded_action).float()
         is_pad = torch.from_numpy(is_pad).bool()
-        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
+        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats[
+            "action_std"
+        ]
         return action_data, is_pad
 
     def _process_image_data(self, head_camera_sequence, start_ts):
-        head_camera = head_camera_sequence[start_ts:start_ts+1]
+        head_camera = head_camera_sequence[start_ts]
         image_data = torch.from_numpy(head_camera).float()
         image_data = image_data / 255.0
         return image_data
@@ -107,8 +134,36 @@ class ZarrEpisodicRoboVerseDataset(torch.utils.data.Dataset):
         pcd_data = transform_point_cloud(
             pcd_data, ROBOT_ROOT_STATES, self.task_name, "cpu"
         )
+        pcd_data = pcd_data[..., : self.pnt_dim]
+        return pcd_data
 
-        return pcd_data[...,:3]
+    def post_process(self, obs):
+        if self.voxel_pnt_cloud:
+            point_cloud = obs["head_camera_pnt_cloud"]
+            B, N, C = point_cloud.shape
+            pcs = []  # 用来存每个样本 transform 后的 dict
+            offsets = []
+            for batch in range(B):
+                pcd = point_cloud[batch]
+                coords = pcd[..., :3].cpu().numpy().astype(np.float32)
+                colors = pcd[..., 3:6].cpu().numpy().astype(np.float32)
+                pcd_dict = self.transform_pcd({"coord": coords, "color": colors})
+                pcs.append(pcd_dict)
+                offsets.append(int(pcd_dict["offset"].item()))  # M
+            all_coords = torch.cat([p["coord"] for p in pcs], dim=0)
+            all_grid_coords = torch.cat([p["grid_coord"] for p in pcs], dim=0)
+            all_feats = torch.cat([p["feat"] for p in pcs], dim=0)
+            all_offsets = torch.tensor(offsets, dtype=torch.int32)
+            pcd_dict = {
+                "coord": all_coords,
+                "grid_coord": all_grid_coords,
+                "feat": all_feats,
+                "offset": all_offsets,
+            }
+            obs["head_camera_pnt_cloud"] = pcd_dict
+        return obs
+
+
 class EpisodicDataset(torch.utils.data.Dataset):
     def __init__(self, episode_ids, dataset_dir, camera_names, norm_stats):
         super(EpisodicDataset).__init__()
@@ -117,37 +172,43 @@ class EpisodicDataset(torch.utils.data.Dataset):
         self.camera_names = camera_names
         self.norm_stats = norm_stats
         self.is_sim = None
-        self.__getitem__(0) # initialize self.is_sim
+        self.__getitem__(0)  # initialize self.is_sim
 
     def __len__(self):
         return len(self.episode_ids)
 
     def __getitem__(self, index):
-        sample_full_episode = False # hardcode
+        sample_full_episode = False  # hardcode
 
         episode_id = self.episode_ids[index]
-        dataset_path = os.path.join(self.dataset_dir, f'episode_{episode_id}.hdf5')
-        with h5py.File(dataset_path, 'r') as root:
-            is_sim = root.attrs['sim']
-            original_action_shape = root['/action'].shape
+        dataset_path = os.path.join(self.dataset_dir, f"episode_{episode_id}.hdf5")
+        with h5py.File(dataset_path, "r") as root:
+            is_sim = root.attrs["sim"]
+            original_action_shape = root["/action"].shape
             episode_len = original_action_shape[0]
             if sample_full_episode:
                 start_ts = 0
             else:
                 start_ts = np.random.choice(episode_len)
             # get observation at start_ts only
-            qpos = root['/observations/qpos'][start_ts]
-            qvel = root['/observations/qvel'][start_ts]
+            qpos = root["/observations/qpos"][start_ts]
+            qvel = root["/observations/qvel"][start_ts]
             image_dict = dict()
             for cam_name in self.camera_names:
-                image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
+                image_dict[cam_name] = root[f"/observations/images/{cam_name}"][
+                    start_ts
+                ]
             # get all actions after and including start_ts
             if is_sim:
-                action = root['/action'][start_ts:]
+                action = root["/action"][start_ts:]
                 action_len = episode_len - start_ts
             else:
-                action = root['/action'][max(0, start_ts - 1):] # hack, to make timesteps more aligned
-                action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
+                action = root["/action"][
+                    max(0, start_ts - 1) :
+                ]  # hack, to make timesteps more aligned
+                action_len = episode_len - max(
+                    0, start_ts - 1
+                )  # hack, to make timesteps more aligned
 
         self.is_sim = is_sim
         padded_action = np.zeros(original_action_shape, dtype=np.float32)
@@ -168,12 +229,16 @@ class EpisodicDataset(torch.utils.data.Dataset):
         is_pad = torch.from_numpy(is_pad).bool()
 
         # channel last
-        image_data = torch.einsum('k h w c -> k c h w', image_data)
+        image_data = torch.einsum("k h w c -> k c h w", image_data)
 
         # normalize image and change dtype to float
         image_data = image_data / 255.0
-        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats["action_std"]
-        qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
+        action_data = (action_data - self.norm_stats["action_mean"]) / self.norm_stats[
+            "action_std"
+        ]
+        qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats[
+            "qpos_std"
+        ]
 
         return image_data, qpos_data, action_data, is_pad
 
@@ -181,10 +246,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
 def get_norm_stats(dataset_dir, num_episodes):
     # Load the zarr data
     zarr_path = dataset_dir
-    replay_buffer = ReplayBuffer.copy_from_path(
-        zarr_path,
-        keys=["state", "action"]
-    )
+    replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=["state", "action"])
 
     # Calculate max episode length
     max_episode_len = int(np.max(replay_buffer.episode_lengths))
@@ -221,26 +283,57 @@ def get_norm_stats(dataset_dir, num_episodes):
         "state_mean": state_mean.numpy().squeeze(),
         "state_std": state_std.numpy().squeeze(),
         "example_state": state,
-        "max_episode_len": max_episode_len
+        "max_episode_len": max_episode_len,
     }
 
     return stats
 
 
-
-def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_size_val, seed=1, keys=None, task_name=None):
-    print(f'\nData from: {dataset_dir}\n')
+def load_data(
+    dataset_dir,
+    num_episodes,
+    camera_names,
+    batch_size_train,
+    batch_size_val,
+    seed=1,
+    keys=None,
+    task_name=None,
+    voxel_pnt_cloud=False,
+    transform_pcd=None,
+    pnt_dim=3,
+):
+    print(f"\nData from: {dataset_dir}\n")
     # obtain train test split
     train_ratio = 0.8
     shuffled_indices = np.random.permutation(num_episodes)
-    train_indices = shuffled_indices[:int(train_ratio * num_episodes)]
-    val_indices = shuffled_indices[int(train_ratio * num_episodes):]
+    train_indices = shuffled_indices[: int(train_ratio * num_episodes)]
+    val_indices = shuffled_indices[int(train_ratio * num_episodes) :]
 
     # obtain normalization stats for state and action
     norm_stats = get_norm_stats(dataset_dir, num_episodes)
     # construct dataset and dataloader
-    train_dataset = ZarrEpisodicRoboVerseDataset(train_indices, dataset_dir, camera_names, norm_stats, keys=keys, task_name=task_name)
-    val_dataset = ZarrEpisodicRoboVerseDataset(val_indices, dataset_dir, camera_names, norm_stats, keys=keys, task_name=task_name)
+    train_dataset = ZarrEpisodicRoboVerseDataset(
+        train_indices,
+        dataset_dir,
+        camera_names,
+        norm_stats,
+        keys=keys,
+        task_name=task_name,
+        voxel_pnt_cloud=voxel_pnt_cloud,
+        transform_pcd=transform_pcd,
+        pnt_dim=pnt_dim,
+    )
+    val_dataset = ZarrEpisodicRoboVerseDataset(
+        val_indices,
+        dataset_dir,
+        camera_names,
+        norm_stats,
+        keys=keys,
+        task_name=task_name,
+        voxel_pnt_cloud=voxel_pnt_cloud,
+        transform_pcd=transform_pcd,
+        pnt_dim=pnt_dim,
+    )
     train_sampler = DistributedSampler(
         train_dataset, shuffle=True, seed=seed, drop_last=False
     )
@@ -248,17 +341,27 @@ def load_data(dataset_dir, num_episodes, camera_names, batch_size_train, batch_s
         val_dataset, shuffle=True, seed=seed, drop_last=False
     )
     train_dataloader = DataLoader(
-        train_dataset, batch_size=batch_size_train, sampler=train_sampler,
-        pin_memory=True, num_workers=0, prefetch_factor=None
+        train_dataset,
+        batch_size=batch_size_train,
+        sampler=train_sampler,
+        pin_memory=True,
+        num_workers=0,
+        prefetch_factor=None,
     )
     val_dataloader = DataLoader(
-        val_dataset, batch_size=batch_size_val, sampler=val_sampler,
-        pin_memory=True, num_workers=0, prefetch_factor=None
+        val_dataset,
+        batch_size=batch_size_val,
+        sampler=val_sampler,
+        pin_memory=True,
+        num_workers=0,
+        prefetch_factor=None,
     )
+
     return train_dataloader, val_dataloader, norm_stats, train_dataset.is_sim
 
 
 ### env utils
+
 
 def sample_box_pose():
     x_range = [0.0, 0.2]
@@ -270,6 +373,7 @@ def sample_box_pose():
 
     cube_quat = np.array([1, 0, 0, 0])
     return np.concatenate([cube_position, cube_quat])
+
 
 def sample_insertion_pose():
     # Peg
@@ -296,7 +400,9 @@ def sample_insertion_pose():
 
     return peg_pose, socket_pose
 
+
 ### helper functions
+
 
 def compute_dict_mean(epoch_dicts):
     result = {k: None for k in epoch_dicts[0]}
@@ -308,17 +414,22 @@ def compute_dict_mean(epoch_dicts):
         result[k] = value_sum / num_items
     return result
 
+
 def detach_dict(d):
     new_d = dict()
     for k, v in d.items():
         new_d[k] = v.detach()
     return new_d
 
+
 def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-def dict_apply(x: Dict[str, torch.Tensor], func: Callable[[torch.Tensor], torch.Tensor]) -> Dict[str, torch.Tensor]:
+
+def dict_apply(
+    x: Dict[str, torch.Tensor], func: Callable[[torch.Tensor], torch.Tensor]
+) -> Dict[str, torch.Tensor]:
     result = dict()
     for key, value in x.items():
         if isinstance(value, dict):

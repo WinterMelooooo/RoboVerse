@@ -76,6 +76,17 @@ class DiffusionPolicyCfg(BasePolicyCfg):
 
 
 @configclass
+class MLPPolicyCfg(BasePolicyCfg):
+    """Configuration for Diffusion Policy metadata.
+
+    Extends the base policy configuration with diffusion-specific settings.
+    """
+
+    name: str = "MLPPolicy"
+    action_config: ActionCfg = ActionCfg(temporal_agg=False)
+
+
+@configclass
 class VLAPolicyCfg(BasePolicyCfg):
     """Configuration for VLAPolicy metadata.
 

@@ -37,9 +37,9 @@ def __get_quick_ref():
     from .rlafford.rl_afford_open_door_cfg import RlAffordOpenDoorCfg
     from .rlbench.basketball_in_hoop_cfg import BasketballInHoopCfg
     from .rlbench.close_box_cfg import CloseBoxCfg
-    from .rlbench.slide_cabinet_open_and_place_cups_cfg import SlideCabinetOpenAndPlaceCupsCfg, TakeCupOutFromCabinetCfg
     from .rlbench.reach_and_drag_cfg import ReachAndDragCfg
     from .rlbench.set_the_table_cfg import SetTheTableCfg
+    from .rlbench.slide_cabinet_open_and_place_cups_cfg import SlideCabinetOpenAndPlaceCupsCfg, TakeCupOutFromCabinetCfg
     from .robosuite import SquareD0Cfg, SquareD1Cfg, SquareD2Cfg, StackD0Cfg
     from .simpler_env.simpler_env_grasp_opened_coke_can_cfg import SimplerEnvGraspOpenedCokeCanCfg
     from .simpler_env.simpler_env_move_near import SimplerEnvMoveNearCfg

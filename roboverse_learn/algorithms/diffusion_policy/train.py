@@ -35,10 +35,11 @@ def main(cfg: OmegaConf):
 
     local_rank = int(os.environ["LOCAL_RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
+    backend = cfg.get("backend", "Gloo")
     torch.cuda.set_device(local_rank)
-    dist.init_process_group(backend="Gloo")
+    dist.init_process_group(backend=backend)
 
-    output_dir = cfg.training.output_dir if cfg.training.output_dir else None    
+    output_dir = cfg.training.output_dir if cfg.training.output_dir else None
     workspace: BaseWorkspace = cls(cfg, local_rank=local_rank, world_size=world_size, output_dir=output_dir)
     workspace.run()
 

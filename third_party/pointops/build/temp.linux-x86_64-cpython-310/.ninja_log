@@ -1,0 +1,20 @@
+# ninja log v5
+3	19764	1751489108313838101	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/sampling/sampling_cuda.o	9de5a91d7ba20339
+2	19858	1751489108398838865	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/grouping/grouping_cuda.o	ec059e8d92e0c642
+3	20046	1751489108587840562	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/random_ball_query/random_ball_query_cuda.o	d017647742e8996b
+1	20063	1751489108588840571	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/aggregation/aggregation_cuda.o	1658f4bb2b4626b7
+1	20254	1751489108803842502	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/ball_query/ball_query_cuda.o	90d2f8076271084b
+1	20441	1751489108989844172	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/attention/attention_cuda.o	d491bb575c24cd73
+2	20451	1751489109001844280	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/knn_query/knn_query_cuda.o	16a4440a0d6d88d5
+4	20569	1751489109109845250	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/subtraction/subtraction_cuda.o	cb7d852fba781bcd
+2	20886	1751489109433848160	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/interpolation/interpolation_cuda.o	dc21f55ffaa5dd6a
+3	35880	1751489124406982812	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/pointops_api.o	4cdc23101eeb93fa
+2	77343	1751489165860357210	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/grouping/grouping_cuda_kernel.o	ae9f77ffddfc9b66
+4	78202	1751489166722365020	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/subtraction/subtraction_cuda_kernel.o	50e4597b728b24cb
+3	78876	1751489167373370918	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/random_ball_query/random_ball_query_cuda_kernel.o	ddff1cd8d3b7e66c
+2	79536	1751489168072377253	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/knn_query/knn_query_cuda_kernel.o	18e2ebffe92b0e53
+2	79712	1751489168227378657	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/ball_query/ball_query_cuda_kernel.o	cebc655d01ca46fc
+1	80139	1751489168644382437	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/aggregation/aggregation_cuda_kernel.o	4954202a8c7a3a09
+1	80627	1751489169163387141	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/attention/attention_cuda_kernel.o	7bd41253e99aaf56
+2	81037	1751489169561390748	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/interpolation/interpolation_cuda_kernel.o	74e50d0425f4f12e
+3	81582	1751489170100395634	/datasets/roboverse/current/yktang/RoboVerse/third_party/pointops/build/temp.linux-x86_64-cpython-310/src/sampling/sampling_cuda_kernel.o	339dda82763e1bef

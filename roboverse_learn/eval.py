@@ -300,13 +300,13 @@ def main():
                 if not use_spUnet_pcd(policyRunner.yaml_cfg):
                     feat_dim = get_pnt_cloud_feat_dim(policyRunner.yaml_cfg)
                     new_obs["point_cloud"] = new_obs["point_cloud"][..., :feat_dim]
-
             if use_sensor(policyRunner.yaml_cfg):
                 new_obs["sensors"] = obs.sensors  # {sensor_name: {"force": Tensor[N_env, 3]}}
 
             images_list.append(np.array(new_obs["rgb"].cpu()))
-            # for key, value in new_obs.items():
-            #    print(f"Key: {key}, Value shape: {value.shape}")
+            for key, value in new_obs.items():
+                print(f"Key: {key}, Value shape: {value.shape}")
+            env.close()
             action = policyRunner.get_action(new_obs)
             for round_i in range(action_set_steps):
                 obs, reward, success, time_out, extras = env.step(action)
@@ -371,7 +371,7 @@ def use_pcd(cfg):
         return "point_cloud" in cfg.task.shape_meta.obs.keys() or "pcds" in cfg.task.shape_meta.obs.keys()
     else:
         keys = cfg.dataset.obs_keys.keys()
-        return "point_cloud" in keys or "pcds" in keys
+        return "point_cloud" in keys or "pcds" in keys or "head_camera_pnt_cloud" in keys
 
 
 def use_dp3_pcd(cfg):
@@ -380,7 +380,10 @@ def use_dp3_pcd(cfg):
         return "pcds" in cfg.task.shape_meta.obs.keys()
     else:
         keys = cfg.dataset.obs_keys.keys()
-        return "head_camera_pnt_cloud" in keys and cfg.dataset.obs_keys.head_camera_pnt_cloud.type == "spUnet"
+        return (
+            "head_camera_pnt_cloud" in keys
+            and not cfg.dataset.obs_keys.head_camera_pnt_cloud.get("type", None) == "spUnet"
+        )
 
 
 def use_spUnet_pcd(cfg):
@@ -389,7 +392,9 @@ def use_spUnet_pcd(cfg):
         return "point_cloud" in cfg.task.shape_meta.obs.keys()
     else:
         keys = cfg.dataset.obs_keys.keys()
-        return "head_camera_pnt_cloud" in keys and cfg.dataset.obs_keys.head_camera_pnt_cloud.type == "dp3"
+        return (
+            "head_camera_pnt_cloud" in keys and cfg.dataset.obs_keys.head_camera_pnt_cloud.get("type", None) == "spUnet"
+        )
 
 
 def use_sensor(cfg):
@@ -406,7 +411,7 @@ def get_pnt_cloud_feat_dim(cfg):
     if task is not None:
         return task.shape_meta.obs.point_cloud.shape[-1]
     else:
-        return cfg.dataset.obs_keys.point_cloud.shape[-1]
+        return cfg.dataset.obs_keys.head_camera_pnt_cloud.shape[-1]
 
 
 if __name__ == "__main__":

@@ -1,0 +1,522 @@
+import copy
+import math
+import os
+import pathlib
+import random
+import sys
+
+import hydra
+import numpy as np
+import torch
+import tqdm
+import wandb
+
+sys.path.append(".")
+
+from mlp_policy.common.checkpoint_util import TopKCheckpointManager
+from mlp_policy.common.json_logger import JsonLogger
+from mlp_policy.common.pytorch_util import (
+    optimizer_to,
+    update_optimizer,
+)
+from mlp_policy.dataset.base_dataset import BaseImageDataset
+from mlp_policy.model.common.lr_scheduler import (
+    get_composite_scheduler,
+)
+from mlp_policy.model.diffusion.ema_model import EMAModel
+from mlp_policy.workspace.base_workspace import BaseWorkspace
+from omegaconf import OmegaConf
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
+
+OmegaConf.register_new_resolver("eval", eval, replace=True)
+
+
+class RobotWorkspace(BaseWorkspace):
+    include_keys = ["global_step", "epoch"]
+
+    def __init__(
+        self, cfg: OmegaConf, output_dir=None, local_rank=None, world_size=None
+    ):
+        self.local_rank = local_rank if local_rank is not None else 0
+        self.world_size = world_size if world_size is not None else 1
+        policy = cfg.optimizer.get("multigpu_lr_policy", None)
+        OmegaConf.set_struct(cfg.logging, False)
+        self.logger = cfg.logging.pop("logger_name", "wandb")
+        OmegaConf.set_struct(cfg.logging, True)
+        if not policy or policy == "sqrt":
+            cfg.optimizer.lr = cfg.optimizer.lr * math.sqrt(self.world_size)
+            if cfg.get("param_groups", None):
+                for pg in cfg.param_groups:
+                    if "lr" in pg:
+                        pg["lr"] = pg["lr"] * math.sqrt(self.world_size)
+        elif policy == "linear":
+            cfg.optimizer.lr = cfg.optimizer.lr * self.world_size
+            if cfg.get("param_groups", None):
+                for pg in cfg.param_groups:
+                    if "lr" in pg:
+                        pg["lr"] = pg["lr"] * math.sqrt(self.world_size)
+        else:
+            raise ValueError(
+                f"Unknown multigpu_lr_policy {policy}, only sqrt and linear are supported"
+            )
+        if "multigpu_lr_policy" in cfg.optimizer:
+            del cfg.optimizer.multigpu_lr_policy
+        super().__init__(cfg, output_dir=output_dir)
+        device = torch.device(f"cuda:{self.local_rank}")
+        # set seed
+        seed = cfg.training.seed
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+        # configure model
+        self.model = hydra.utils.instantiate(cfg.policy)
+        self.model.to(device)
+        self.ema_model = None
+        if cfg.training.use_ema:
+            self.ema_model = copy.deepcopy(self.model)
+        # configure training state
+        self.optimizer = hydra.utils.instantiate(
+            cfg.optimizer, params=self.model.parameters()
+        )
+        self.optimizer = update_optimizer(
+            self.optimizer, self.model, cfg.get("param_groups", None)
+        )
+        # configure training state
+        self.global_step = 0
+        self.epoch = 0
+        self.best_val_loss = float("inf")
+        self.best_epoch = 0
+
+    def run(self):
+        model = DDP(
+            self.model,
+            device_ids=[self.local_rank],
+            output_device=self.local_rank,
+            find_unused_parameters=False,
+        )
+
+        cfg = copy.deepcopy(self.cfg)
+        # configure dataset
+        dataset: BaseImageDataset
+        dataset = hydra.utils.instantiate(cfg.task.dataset)
+        assert isinstance(dataset, BaseImageDataset)
+        train_dataloader = create_dataloader(
+            dataset, **cfg.dataloader, multi_gpu=self.world_size > 1
+        )
+        normalizer = dataset.get_normalizer()
+        # configure validation dataset
+        val_dataset = dataset.get_validation_dataset()
+        val_dataloader = create_dataloader(
+            val_dataset, **cfg.val_dataloader, multi_gpu=self.world_size > 1
+        )
+
+        # warm_up_steps = cfg.training.lr_warmup_steps
+        warm_up_steps = (
+            cfg.training.lr_warmup_steps // self.world_size
+            if cfg.training.consistent_warmup
+            else cfg.training.lr_warmup_steps
+        )
+
+        if cfg.training.get("sensor_gt_ratio", None) is not None:
+            self.gt_before_epoch = (
+                cfg.training.sensor_gt_ratio * cfg.training.num_epochs
+            )
+
+        self.lr_scheduler = get_composite_scheduler(
+            cfg.training.lr_scheduler,
+            optimizer=self.optimizer,
+            default_num_warmup_steps=warm_up_steps,
+            default_num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
+            // cfg.training.gradient_accumulate_every,
+            # pytorch assumes stepping LRScheduler every epoch
+            # however huggingface diffusers steps it every batch
+            last_epoch=self.global_step - 1,
+            step_per_epoch=len(train_dataloader),
+            params_groups=cfg.get("param_groups", None),
+        )
+        # self.lr_scheduler = get_scheduler(
+        #    cfg.training.lr_scheduler,
+        #    optimizer=self.optimizer,
+        #    default_num_warmup_steps=warm_up_steps,
+        #    default_num_training_steps=(len(train_dataloader) * cfg.training.num_epochs)
+        #    // cfg.training.gradient_accumulate_every,
+        #    # pytorch assumes stepping LRScheduler every epoch
+        #    # however huggingface diffusers steps it every batch
+        #    last_epoch=self.global_step - 1,
+        # )
+        lr_scheduler = self.lr_scheduler
+        # resume training
+        if cfg.training.resume:
+            lastest_ckpt_path = self.get_checkpoint_path(cfg.training.tag)
+            if lastest_ckpt_path.is_file():
+                print(f"Resuming from checkpoint {lastest_ckpt_path}")
+                self.load_checkpoint(path=lastest_ckpt_path)
+
+        model.module.set_normalizer(normalizer)
+        if cfg.training.use_ema:
+            self.ema_model.set_normalizer(normalizer)
+        # configure ema
+        ema: EMAModel = None
+        if cfg.training.use_ema:
+            print("Using EMA model")
+            ema = hydra.utils.instantiate(cfg.ema, model=self.ema_model)
+
+        # configure env
+        # env_runner: BaseImageRunner
+        # env_runner = hydra.utils.instantiate(
+        #     cfg.task.env_runner,
+        #     output_dir=self.output_dir)
+        # assert isinstance(env_runner, BaseImageRunner)
+        env_runner = None
+        wandb_run = None
+        writer = None
+
+        # configure logging
+        if self.local_rank == 0:
+            if cfg.logging.mode == "online":
+                if self.logger == "wandb":
+                    wandb_run = wandb.init(
+                        dir=str(self.output_dir),
+                        config=OmegaConf.to_container(cfg, resolve=True),
+                        **cfg.logging,
+                    )
+                    wandb.config.update(
+                        {
+                            "output_dir": self.output_dir,
+                        }
+                    )
+                elif self.logger == "tensorboard":
+                    tb_logdir = os.path.join(self.output_dir, "tb_logs")
+                    writer = SummaryWriter(log_dir=tb_logdir)
+        # configure checkpoint
+        topk_manager = TopKCheckpointManager(
+            save_dir=os.path.join(self.output_dir, "checkpoints"), **cfg.checkpoint.topk
+        )
+        # device transfer
+        device = torch.device(f"cuda:{self.local_rank}")
+        self.model.to(device)
+        if self.ema_model is not None:
+            self.ema_model.to(device)
+        optimizer_to(self.optimizer, device)
+
+        # save batch for sampling
+        train_sampling_batch = None
+
+        if cfg.training.debug:
+            cfg.training.num_epochs = 2
+            cfg.training.max_train_steps = 3
+            cfg.training.max_val_steps = 3
+            cfg.training.rollout_every = 1
+            cfg.training.checkpoint_every = 1
+            cfg.training.val_every = 1
+            cfg.training.sample_every = 1
+
+        # training loop
+        log_path = os.path.join(self.output_dir, "logs.json.txt")
+        if self.local_rank == 0:
+            json_logger = JsonLogger(log_path)
+            json_logger.start()
+        for local_epoch_idx in range(cfg.training.num_epochs):
+            if self.world_size > 1:
+                train_dataloader.sampler.set_epoch(local_epoch_idx)
+            step_log = dict()
+            # ========= train for this epoch ==========
+            if cfg.training.freeze_encoder:
+                model.module.obs_encoder.eval()
+                model.module.obs_encoder.requires_grad_(False)
+
+            train_losses = list()
+            if self.local_rank == 0:
+                tepoch = tqdm.tqdm(
+                    train_dataloader,
+                    desc=f"Training epoch {self.epoch}",
+                    leave=False,
+                    mininterval=cfg.training.tqdm_interval_sec,
+                )
+            else:
+                tepoch = train_dataloader
+            for batch_idx, batch in enumerate(tepoch):
+                batch = dataset.postprocess(batch, device)
+                if train_sampling_batch is None:
+                    train_sampling_batch = copy.deepcopy(batch)
+                # print("obs_dict:", batch)
+                # print("dict_keys:", batch.keys())
+                # print("dict_items:", batch.items())
+                # print()
+                # from pprint import pprint
+
+                # pprint(batch)
+                # compute loss
+                if hasattr(self, "gt_before_epoch"):
+                    raw_loss = model.module.compute_loss(
+                        batch, use_gt_sensor=local_epoch_idx < self.gt_before_epoch
+                    )
+                else:
+                    raw_loss = model.module.compute_loss(batch)
+                loss = raw_loss / cfg.training.gradient_accumulate_every
+                loss.backward()
+
+                # step optimizer
+                if self.global_step % cfg.training.gradient_accumulate_every == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+                    lr_scheduler.step()
+
+                # update ema
+                if cfg.training.use_ema:
+                    ema.step(model.module)
+
+                # logging
+                raw_loss_cpu = raw_loss.item()
+                if self.local_rank == 0:
+                    tepoch.set_postfix(loss=raw_loss_cpu, refresh=False)
+                train_losses.append(raw_loss_cpu)
+                step_log = {
+                    "train_loss": raw_loss_cpu,
+                    "global_step": self.global_step,
+                    "epoch": self.epoch,
+                    # "lr": lr_scheduler.get_last_lr()[0],
+                }
+                all_lrs = lr_scheduler.get_last_lr()
+                for pg, lr in zip(self.optimizer.param_groups, all_lrs):
+                    step_log[f"lr_{pg.get('name', 'default')}"] = lr
+
+                is_last_batch = batch_idx == (len(train_dataloader) - 1)
+                if not is_last_batch:
+                    # log of last step is combined with validation and rollout
+                    if self.local_rank == 0:
+                        if wandb_run is not None:
+                            wandb_run.log(step_log, step=self.global_step)
+                        json_logger.log(step_log)
+                    self.global_step += 1
+
+                if (cfg.training.max_train_steps is not None) and batch_idx >= (
+                    cfg.training.max_train_steps - 1
+                ):
+                    break
+
+            if self.local_rank == 0:
+                tepoch.close()
+            # at the end of each epoch
+            # replace train_loss with epoch average
+            train_loss = np.mean(train_losses)
+            step_log["train_loss"] = train_loss
+
+            # ========= eval for this epoch ==========
+            policy = model.module
+            if cfg.training.use_ema:
+                policy = self.ema_model
+            policy.eval()
+
+            # run rollout
+            # if (self.epoch % cfg.training.rollout_every) == 0:
+            #     runner_log = env_runner.run(policy)
+            #     # log all
+            #     step_log.update(runner_log)
+
+            # run validation
+            if (self.epoch % cfg.training.val_every) == 0:
+                with torch.no_grad():
+                    val_losses = list()
+                    if self.local_rank == 0:
+                        tepoch = tqdm.tqdm(
+                            val_dataloader,
+                            desc=f"Validation epoch {self.epoch}",
+                            leave=False,
+                            mininterval=cfg.training.tqdm_interval_sec,
+                        )
+                    else:
+                        tepoch = val_dataloader
+                    for batch_idx, batch in enumerate(tepoch):
+                        batch = dataset.postprocess(batch, device)
+                        if hasattr(self, "gt_before_epoch"):
+                            loss = model.module.compute_loss(
+                                batch,
+                                use_gt_sensor=local_epoch_idx < self.gt_before_epoch,
+                            )
+                        else:
+                            loss = model.module.compute_loss(batch)
+                        val_losses.append(loss)
+                        if (cfg.training.max_val_steps is not None) and batch_idx >= (
+                            cfg.training.max_val_steps - 1
+                        ):
+                            break
+                    if len(val_losses) > 0:
+                        val_loss = torch.mean(torch.tensor(val_losses)).item()
+                        # log epoch average validation loss
+                        step_log["val_loss"] = val_loss
+                        if self.local_rank == 0 and val_loss < self.best_val_loss:
+                            self.best_val_loss = val_loss
+                            self.best_epoch = self.epoch
+                            best_path = self.save_checkpoint(
+                                os.path.join(
+                                    cfg.checkpoint.save_root_dir,
+                                    "checkpoints",
+                                    "best.ckpt",
+                                )
+                            )
+                            print(
+                                f"[Epoch {self.epoch}] New best val loss {val_loss:.4f}, saved to {best_path}"
+                            )
+            # run diffusion sampling on a training batch
+            if (self.epoch % cfg.training.sample_every) == 0:
+                with torch.no_grad():
+                    # sample trajectory from training set, and evaluate difference
+                    batch = train_sampling_batch
+                    obs_dict = copy.deepcopy(batch["obs"])
+                    if "goal" in batch:
+                        obs_dict = copy.deepcopy(batch)
+                    # print("obs_dict:", obs_dict)
+                    # print("dict_keys:", obs_dict.keys())
+                    # print("dict_items:", obs_dict.items())
+                    # print()
+                    # from pprint import pprint
+                    # pprint(obs_dict)
+                    gt_action = batch["action"]
+                    if hasattr(self, "gt_before_epoch"):
+                        result = policy.predict_action(
+                            obs_dict,
+                            use_gt_sensor=local_epoch_idx < self.gt_before_epoch,
+                        )
+                    else:
+                        result = policy.predict_action(obs_dict)
+                    pred_action = result["action_pred"]
+                    if pred_action.shape != gt_action.shape:
+                        if (
+                            pred_action.shape[0] == gt_action.shape[0]
+                            and pred_action.shape[1] == 1
+                            and pred_action.shape[2] == gt_action.shape[1]
+                        ):
+                            pred_action = pred_action.squeeze(1)
+                    mse = torch.nn.functional.mse_loss(pred_action, gt_action)
+                    step_log["train_action_mse_error"] = mse.item()
+                    del batch
+                    del obs_dict
+                    del gt_action
+                    del result
+                    del pred_action
+                    del mse
+
+            # checkpoint
+            if (
+                (self.epoch + 1) % cfg.training.checkpoint_every
+            ) == 0 or self.epoch + 1 == cfg.training.num_epochs:
+                # checkpointing
+                save_name = pathlib.Path(self.cfg.task.dataset.zarr_path).stem
+                self.save_checkpoint(
+                    cfg.checkpoint.save_root_dir + f"/checkpoints/{self.epoch + 1}.ckpt"
+                )  # TODO
+
+            # ========= eval end for this epoch ==========
+            policy.train()
+
+            # end of epoch
+            # log of last step is combined with validation and rollout
+            if self.local_rank == 0:
+                json_logger.log(step_log)
+                if wandb_run is not None:
+                    wandb_run.log(step_log, step=self.global_step)
+            self.global_step += 1
+            self.epoch += 1
+        if self.local_rank == 0:
+            print(
+                f"Training finished, best val loss {self.best_val_loss:.4f} at epoch {self.best_epoch}"
+            )
+            # json_logger.close()
+            if wandb_run is not None:
+                wandb_run.finish()
+            if writer is not None:
+                for k, v in step_log.items():
+                    writer.add_scalar(f"train/{k}", v, self.global_step)
+
+
+class BatchSampler:
+    def __init__(
+        self,
+        data_size: int,
+        batch_size: int,
+        shuffle: bool = False,
+        seed: int = 0,
+        drop_last: bool = True,
+    ):
+        assert drop_last
+        self.data_size = data_size
+        self.batch_size = batch_size
+        self.num_batch = data_size // batch_size
+        self.discard = data_size - batch_size * self.num_batch
+        self.shuffle = shuffle
+        self.rng = np.random.default_rng(seed) if shuffle else None
+
+    def __iter__(self):
+        if self.shuffle:
+            perm = self.rng.permutation(self.data_size)
+        else:
+            perm = np.arange(self.data_size)
+        if self.discard > 0:
+            perm = perm[: -self.discard]
+        perm = perm.reshape(self.num_batch, self.batch_size)
+        for i in range(self.num_batch):
+            yield perm[i]
+
+    def __len__(self):
+        return self.num_batch
+
+
+def create_dataloader(
+    dataset,
+    *,
+    batch_size: int,
+    shuffle: bool,
+    num_workers: int,
+    pin_memory: bool,
+    persistent_workers: bool,
+    seed: int = 0,
+    multi_gpu: bool = False,
+):
+    def collate(x):
+        assert len(x) == 1
+        return x[0]
+
+    # print("create_dataloader_batch_size", batch_size)
+    if multi_gpu:
+        sampler = DistributedSampler(
+            dataset, shuffle=shuffle, seed=seed, drop_last=True
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=num_workers,
+            pin_memory=False,
+            persistent_workers=persistent_workers,
+        )
+    else:
+        batch_sampler = BatchSampler(
+            len(dataset), batch_size, shuffle=shuffle, seed=seed, drop_last=True
+        )
+        dataloader = DataLoader(
+            dataset,
+            collate_fn=collate,
+            sampler=batch_sampler,
+            num_workers=num_workers,
+            pin_memory=False,
+            persistent_workers=persistent_workers,
+        )
+    return dataloader
+
+
+@hydra.main(
+    version_base=None,
+    config_path=str(pathlib.Path(__file__).parent.parent.joinpath("config")),
+    config_name=pathlib.Path(__file__).stem,
+)
+def main(cfg):
+    workspace = RobotWorkspace(cfg)
+    workspace.run()
+
+
+if __name__ == "__main__":
+    main()
