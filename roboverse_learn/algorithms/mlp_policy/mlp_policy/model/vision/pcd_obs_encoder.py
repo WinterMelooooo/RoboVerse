@@ -82,7 +82,9 @@ class PCDObsEncoder(ModuleAttrMixin):
         self.pcd_nsample = pcd_nsample
         self.pcd_npoints = pcd_npoints
         if not self.pre_sample:
-            self.linear = nn.Linear(3 + pcd_model.num_channels, pcd_hidden_dim, bias=False)
+            self.linear = nn.Linear(
+                3 + pcd_model.num_channels, pcd_hidden_dim, bias=False
+            )
             self.bn = nn.BatchNorm1d(pcd_hidden_dim)
         else:
             self.linear = nn.Linear(3 + in_channel, in_channel, bias=False)
@@ -97,13 +99,21 @@ class PCDObsEncoder(ModuleAttrMixin):
         projector = []
         for i in range(projector_layers):
             if i > 0 or (not self.pre_sample):
-                projector.append(nn.Conv1d(pcd_hidden_dim, projector_channels[i], kernel_size=1))
+                projector.append(
+                    nn.Conv1d(pcd_hidden_dim, projector_channels[i], kernel_size=1)
+                )
             else:
-                projector.append(nn.Conv1d(pcd_model.num_channels, projector_channels[i], kernel_size=1))
+                projector.append(
+                    nn.Conv1d(
+                        pcd_model.num_channels, projector_channels[i], kernel_size=1
+                    )
+                )
             projector.append(nn.BatchNorm1d(projector_channels[i]))
             projector.append(nn.ReLU(inplace=True))
         projector.append(nn.MaxPool1d(pcd_npoints))
-        projector.append(nn.Conv1d(projector_channels[i], projector_channels[i + 1], kernel_size=1))
+        projector.append(
+            nn.Conv1d(projector_channels[i], projector_channels[i + 1], kernel_size=1)
+        )
         projector.append(nn.BatchNorm1d(projector_channels[i + 1]))
         self.projector = nn.Sequential(*projector)
         self.projector_channels = projector_channels
@@ -175,7 +185,9 @@ class PCDObsEncoder(ModuleAttrMixin):
             with_xyz=True,
         )
 
-        x = self.relu(self.bn(self.linear(x).transpose(1, 2).contiguous()))  # (m, c, nsample)
+        x = self.relu(
+            self.bn(self.linear(x).transpose(1, 2).contiguous())
+        )  # (m, c, nsample)
         x = self.pool(x).squeeze(-1)  # (m, c)
 
         if return_index:
@@ -206,7 +218,9 @@ class PCDObsEncoder(ModuleAttrMixin):
             features = pcd_model(pcd_dict)
 
             if self.use_mask:
-                x = self.pcd_sampling((pcd_dict["coord"], features, pcd_dict["offset"]), pcd_dict["mask"])
+                x = self.pcd_sampling(
+                    (pcd_dict["coord"], features, pcd_dict["offset"]), pcd_dict["mask"]
+                )
             else:
                 x = self.pcd_sampling((pcd_dict["coord"], features, pcd_dict["offset"]))
 
@@ -228,7 +242,7 @@ class PCDObsEncoder(ModuleAttrMixin):
 
         # pass all pcd obs to pcd model
         for key in self.pcd_keys:
-            pcd = obs_dict[key]
+            pcd = obs_dict[key][0]
             if batch_size is None:
                 assert (len(pcd["offset"]) % self.n_obs_steps) == 0, (
                     len(pcd["offset"]),
@@ -238,7 +252,11 @@ class PCDObsEncoder(ModuleAttrMixin):
             assert pcd["feat"].shape[1:] == self.key_shape_map[key]
 
             feature = self.encode_pcd(
-                (self.key_model_map["pcd"] if self.share_pcd_model else self.key_model_map[key]),
+                (
+                    self.key_model_map["pcd"]
+                    if self.share_pcd_model
+                    else self.key_model_map[key]
+                ),
                 pcd,
             )
             assert feature.shape[0] == batch_size, (feature.shape, batch_size)
@@ -263,10 +281,14 @@ class PCDObsEncoder(ModuleAttrMixin):
     def output_shape(self):
         obs_shape_meta = self.shape_meta["obs"]
         batch_size = 1
-        features = [torch.zeros((batch_size, (self.projector_channels[-1])), device=self.device)]
+        features = [
+            torch.zeros((batch_size, (self.projector_channels[-1])), device=self.device)
+        ]
         for key in self.low_dim_keys:
             shape = tuple(obs_shape_meta[key]["shape"])
-            this_obs = torch.zeros((batch_size,) + shape, dtype=self.dtype, device=self.device)
+            this_obs = torch.zeros(
+                (batch_size,) + shape, dtype=self.dtype, device=self.device
+            )
             features.append(this_obs)
         result = torch.cat(features, dim=-1)
         return result.shape[1:]

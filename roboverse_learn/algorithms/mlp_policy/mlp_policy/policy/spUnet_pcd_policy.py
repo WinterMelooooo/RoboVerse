@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from einops import reduce
 
+from mlp_policy.common.pytorch_util import dict_apply
 from mlp_policy.model.common.normalizer import LinearNormalizer
 from mlp_policy.model.vision.multi_image_obs_encoder import MultiImageObsEncoder
 from mlp_policy.policy.base_mlp_policy import BaseMLPPolicy
@@ -66,6 +67,7 @@ class spUnetPcdPolicy(BaseMLPPolicy):
             nobs = self.normalizer.normalize(obs_dict["obs"])
 
         if pcds is not None:
+            pcds[0] = dict_apply(pcds[0], lambda x: x.to(device=self.device))
             nobs["pcds"] = pcds
         nobs_features = self.obs_encoder(nobs)
         naction_pred = self.model(nobs_features)  # (B, action_dim)

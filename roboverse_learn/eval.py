@@ -178,7 +178,10 @@ def main():
     assert os.path.exists(task.traj_filepath), f"Trajectory file: {task.traj_filepath} does not exist."
     init_states, all_actions, all_states = get_traj(task, robot, env.handler)
     mapping_json_path = os.path.join(
-        "./roboverse_demo/demo_isaaclab", f"{args.task}-Level{args.random.level}", f"robot-{args.robot}", "mapping.json"
+        "./roboverse_demo/demo_isaaclab",
+        f"{args.task}-Level{args.random.level}",
+        f"robot-{args.robot}",
+        "mapping.json",
     )
     init_states = reorder_init_states(init_states, mapping_json_path)
     num_demos = len(init_states)
@@ -304,9 +307,6 @@ def main():
                 new_obs["sensors"] = obs.sensors  # {sensor_name: {"force": Tensor[N_env, 3]}}
 
             images_list.append(np.array(new_obs["rgb"].cpu()))
-            for key, value in new_obs.items():
-                print(f"Key: {key}, Value shape: {value.shape}")
-            env.close()
             action = policyRunner.get_action(new_obs)
             for round_i in range(action_set_steps):
                 obs, reward, success, time_out, extras = env.step(action)
@@ -409,7 +409,14 @@ def use_sensor(cfg):
 def get_pnt_cloud_feat_dim(cfg):
     task = cfg.get("task", None)
     if task is not None:
-        return task.shape_meta.obs.point_cloud.shape[-1]
+        if task.shape_meta.obs.get("point_cloud", None) is not None:
+            return task.shape_meta.obs.point_cloud.shape[-1]
+        elif task.shape_meta.obs.get("pcds", None) is not None:
+            return task.shape_meta.obs.pcds.shape[-1]
+        else:
+            raise ValueError(
+                f"Task does not have point cloud or pcds in its shape_meta.obs, please check the task configuration keys: {task.shape_meta.obs.keys()}."
+            )
     else:
         return cfg.dataset.obs_keys.head_camera_pnt_cloud.shape[-1]
 

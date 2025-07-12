@@ -1,7 +1,7 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 export CUDA_VISIBLE_DEVICES=1
-ckpt=./info/outputs/MLP/2025.07.03/10.04.07_RGB_ResNet18_LiberoPickOrangeJuiceFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt
-task=LiberoPickOrangeJuice
+ckpt=info/outputs/MLP/2025.07.09/08.05.51_RGB_ResNet18_CloseBoxFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt
+task=CloseBox
 num_envs=1
 random_level=2
 use_touch=0
