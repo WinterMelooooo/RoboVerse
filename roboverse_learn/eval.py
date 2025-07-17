@@ -242,6 +242,7 @@ def main():
         images_list = []
         while step < MaxStep:
             log.debug(f"Step {step}")
+            print(obs)
             new_obs = {
                 "rgb": obs.cameras["camera0"].rgb,
                 "joint_qpos": obs.robots[args.robot].joint_pos,
