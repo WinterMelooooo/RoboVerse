@@ -16,11 +16,11 @@ OmegaConf.register_new_resolver("eval", eval, replace=True)
 
 import numpy as np
 import torch
-from polymetis import GripperInterface, RobotInterface
+import zmq
 from termcolor import cprint
 
 from roboverse_learn.algorithms.utils.multi_realsense import MultiRealsenseWrapper
-
+from roboverse_learn.algorithms.utils.franka_ros_client import FrankaRobotClient
 
 class RealWorldEnv:
     """
@@ -34,13 +34,14 @@ class RealWorldEnv:
         num_points=4096,
         gripper_speed=1.0,
         gripper_force=0.1,
+        use_server_robot=True
     ):
         # camera
         self.camera = MultiRealsenseWrapper()
-        self.robot = RobotInterface(ip_address="172.16.0.1")
-        self.gripper = GripperInterface(ip_address="172.16.0.1")
-        self.gripper_speed = gripper_speed
-        self.gripper_force = gripper_force
+        if use_server_robot:
+            self.robot = FrankaRobotClient()
+        else:
+            self.robot = FrankaRobot()
         # inference device
         if device == "gpu":
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -49,17 +50,14 @@ class RealWorldEnv:
 
     def step(self, single_step_action):
         # Stepping the robot
-        robot_body_action, gripper_width = self._action_to_polymetis_state(single_step_action)
+        action = self._action_to_ros_state(single_step_action)
         # import pdb; pdb.set_trace()
-        self.robot.update_desired_joint_positions(robot_body_action.detach().cpu())
-        self.gripper.grasp(grasp_width=gripper_width, speed=self.gripper_speed, force=self.gripper_force)
+        self.robot.goto(action)
         # After execution
         cam_dict = self.camera()
-        robot_state = self._robot_polymetis_state_to_tensor_state(self.robot.get_robot_state())
-        gripper_state = self._gripper_polymetis_state_to_tensor_state(self.gripper.get_state())
-        agent_pos = torch.cat([gripper_state, robot_state], dim=0).to(self.device)
+        robot_state = torch.tensor(self.robot.get_state())
         obs_dict = {
-            "agent_pos": agent_pos.unsqueeze(0).to(self.device),
+            "agent_pos": robot_state.unsqueeze(0).to(self.device),
             "cameras": cam_dict
         }
         if not len(obs_dict["cameras"]["camera0"]["depth"].shape) == 3:
@@ -80,20 +78,17 @@ class RealWorldEnv:
 
     def reset(self):
         # reset robot
-        self.robot.go_home()
-        self.robot.start_joint_impedance()
-        self.gripper.goto(width=0.08, speed=0.1, force=0.5)
-
+        self.robot.do_homing()
+        time.sleep(3)  # wait for the robot to finish homing
         print("Robot ready!")
 
         # ======== INIT ==========
         cam_dict = self.camera()
-        robot_state = self._robot_polymetis_state_to_tensor_state(self.robot.get_robot_state())
-        gripper_state = self._gripper_polymetis_state_to_tensor_state(self.gripper.get_state())
-        agent_pos = torch.cat([gripper_state, robot_state], dim=0).to(self.device)
+        robot_state = torch.tensor(self.robot.get_state())
+        agent_pos = robot_state.to(self.device)
         obs_dict = {
-            "cameras": cam_dict,
-            "agent_pos": agent_pos,
+            "agent_pos": robot_state.unsqueeze(0).to(self.device),
+            "cameras": cam_dict
         }
         obs_dict = dict_apply(obs_dict, lambda x: torch.from_numpy(x) if isinstance(x, np.ndarray) else x)
         obs_dict = dict_apply(obs_dict, lambda x: x.unsqueeze(0).to(self.device))
@@ -125,7 +120,7 @@ class RealWorldEnv:
         width = gripper_state.width
         return torch.tensor([width/2]*2).to("cuda")  # (2,)
 
-    def _action_to_polymetis_state(self, action):
+    def _action_to_ros_state(self, action):
         """
         Args:
             action: Dict{robot_name: {'dof_pos_target':{"joint_name": tensor([1,])}}}
@@ -154,9 +149,8 @@ class RealWorldEnv:
         robot_state = [
             action[robot_name]["dof_pos_target"][joint_name] for joint_name in robot_joint_name_sequence
         ]
-        robot_state = torch.stack(robot_state, dim=0).to("cuda")  # (7,)
-        gripper_width = [
+        gripper_state = [
             action[robot_name]["dof_pos_target"][joint_name].item() for joint_name in gripper_joint_name_sequence
         ]
-        gripper_width = sum(gripper_width)  # assert two fingers are always symmetric
-        return robot_state, gripper_width
+        action = gripper_state + robot_state
+        return action

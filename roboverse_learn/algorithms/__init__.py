@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from .base_runner import PolicyRunner
-
+try:
+    from .base_runner import PolicyRunner
+except:
+    pass
 
 def get_runner(algo: str) -> type[PolicyRunner]:
     if algo == "diffusion_policy":

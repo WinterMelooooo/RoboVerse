@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import datetime
+import torch
 import os
+import sys
 import time
 from dataclasses import dataclass
-from typing import Literal
-
-from roboverse_learn.algorithms.utils.real_world_env import RealWorldEnv
+from typing import Literal, Optional
+try:
+    from roboverse_learn.algorithms.utils.real_world_env_ros import RealWorldEnv
+except:
+    sys.path.append("./")
+    from roboverse_learn.algorithms.utils.real_world_env_ros import RealWorldEnv
 
 try:
     import isaacgym  # noqa: F401
@@ -55,7 +60,7 @@ class Args:
     """Number of parallel environments, find a proper number for best performance on your machine"""
     sim: Literal["isaaclab", "mujoco", "isaacgym"] = "isaaclab"
     """Simulator backend"""
-    max_demo: int | None = None
+    max_demo: Optional[int] = None
     """Maximum number of demos to collect, None for all demos"""
     headless: bool = False
     """Run in headless mode"""
@@ -79,10 +84,12 @@ class Args:
     """Maximum number of steps to collect"""
     gpu_id: int = 0
     """GPU ID to use"""
-    wrapper_class: str | None = None
+    wrapper_class: Optional[str] = None
     """Env wrapper to use"""
     use_touch: bool = False
     """Use touch sensor"""
+    use_server_robot: bool = True
+    """Use server robot, if False, use local robot"""
 
     def __post_init__(self):
         if self.random.table and not self.table:
@@ -105,7 +112,7 @@ def main():
     task = get_task(args.task)
     task.episode_length = args.action_set_steps * args.max_step
     robot = get_robot(args.robot)
-    env = RealWorldEnv()
+    env = RealWorldEnv(args.use_server_robot)
     task.episode_length = args.action_set_steps * args.max_step
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -139,7 +146,6 @@ def main():
         try:
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
         except:
-            import sys
 
             sys.path.append(".")
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
@@ -189,10 +195,11 @@ def main():
         TimeOut = [False] * num_envs
         images_list = []
         while step < MaxStep:
-            log.debug(f"Step {step}")
+            #log.debug(f"Step {step}")
+            start_time = time.time()
             new_obs = {
                 "rgb": obs.cameras["camera0"].rgb,
-                "joint_qpos": obs.robots[args.robot].joint_pos,
+                "joint_qpos": obs.agent_pos.squeeze(1),
             }
             if use_rgbd(policyRunner.yaml_cfg):
                 new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
@@ -261,7 +268,7 @@ def main():
             action = policyRunner.get_action(new_obs)
             for round_i in range(action_set_steps):
                 obs = env.step(action)
-                print("Press ENTER if success", end="", flush=True)
+                # print("Press ENTER if success", end="", flush=True)
                 ready, _, _ = select.select([sys.stdin], [], [], 0)
                 if ready:
                     _ = sys.stdin.readline()  # 读掉那一行
@@ -273,11 +280,13 @@ def main():
             # eval
             SuccessOnce = [SuccessOnce[i] or success[i] for i in range(num_envs)]
             TimeOut = [TimeOut[i] or time_out[i] for i in range(num_envs)]
+            end_time = time.time()
+            log.debug(f"Step {step} took {end_time - start_time:.2f}s")
             step += 1
             if all(SuccessOnce):
                 break
 
-        SuccessEnd = success.tolist()
+        SuccessEnd = success.tolist() if isinstance(success, torch.Tensor) else success
         total_success += SuccessOnce.count(True)
         total_completed += len(SuccessOnce)
         os.makedirs(f"tmp/{ckpt_name}", exist_ok=True)

@@ -110,7 +110,7 @@ class PolicyRunner:
         assert obs_dict["agent_pos"].shape == (
             self.num_envs,
             self.policy_cfg.obs_config.obs_dim,
-        )
+        ), f"Expected obs_dict['agent_pos'] to have shape (num_envs, obs_dim):({self.num_envs},{self.policy_cfg.obs_config.obs_dim}), got {obs_dict['agent_pos'].shape} instead"
         # flush unused keys
         if "pcds" in self.policy_cfg.obs_config.obs_keys:
             self.policy_cfg.obs_config.obs_keys.append("point_cloud")
