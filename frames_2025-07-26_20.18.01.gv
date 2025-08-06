@@ -1,0 +1,19 @@
+digraph G {
+"base" -> "fr3_link0"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"fr3_link8" -> "fr3_hand"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"fr3_link7" -> "fr3_link8"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"fr3_hand" -> "fr3_hand_tcp"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"fr3_link6" -> "fr3_link7"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_hand" -> "fr3_leftfinger"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_hand" -> "fr3_rightfinger"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link0" -> "fr3_link1"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link1" -> "fr3_link2"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link2" -> "fr3_link3"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link3" -> "fr3_link4"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link4" -> "fr3_link5"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+"fr3_link5" -> "fr3_link6"[label=" Broadcaster: default_authority\nAverage rate: 15.2\nBuffer length: 5.0\nMost recent transform: 1753561081.959484\nOldest transform: 1753561076.959423\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1753561081.9747534"[ shape=plaintext ] ;
+}->"base";
+}

@@ -1,7 +1,7 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 export CUDA_VISIBLE_DEVICES=0
-ckpt=./info/outputs/DP/2025.07.18/03.53.25_RGB_ResNet18_CloseBoxFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/200.ckpt
-task=CloseBox
+ckpt=/home/balen/Projects/yktang/RoboVerse/info/outputs/DP/2025.08.02/00.09.13_RGBD_ResNet18_LiberoPickButterFrankaRealWorld_obs:joint_pos_act:joint_pos/checkpoints/300.ckpt
+task=LiberoPickButter
 num_envs=1
 #random_level=2
 #use_touch=0

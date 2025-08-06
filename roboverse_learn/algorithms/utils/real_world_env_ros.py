@@ -21,6 +21,10 @@ from termcolor import cprint
 
 from roboverse_learn.algorithms.utils.multi_realsense import MultiRealsenseWrapper
 from roboverse_learn.algorithms.utils.franka_ros_client import FrankaRobotClient
+try:
+    from roboverse_learn.algorithms.utils.franka_ros import FrankaRobot
+except:
+    pass
 
 class RealWorldEnv:
     """
@@ -91,9 +95,13 @@ class RealWorldEnv:
             "cameras": cam_dict
         }
         obs_dict = dict_apply(obs_dict, lambda x: torch.from_numpy(x) if isinstance(x, np.ndarray) else x)
+        print(f"obs_dict: {obs_dict}")
         obs_dict = dict_apply(obs_dict, lambda x: x.unsqueeze(0).to(self.device))
         obs_dict = AttrDict.from_dict(obs_dict)  # Convert the entire obs_dict to AttrDict for consistency
         return obs_dict
+
+    def close(self):
+        return
 
     def _robot_polymetis_state_to_tensor_state(self, robot_state):
         """

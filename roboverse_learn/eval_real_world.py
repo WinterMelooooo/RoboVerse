@@ -5,6 +5,7 @@ import torch
 import os
 import sys
 import time
+import torch.nn.functional as F
 from dataclasses import dataclass
 from typing import Literal, Optional
 try:
@@ -19,7 +20,7 @@ except ImportError:
     pass
 
 import select
-
+import cv2
 import imageio.v2 as iio
 import numpy as np
 import rootutils
@@ -47,6 +48,29 @@ from metasim.utils.setup_util import (
 from roboverse_learn.algorithms import PolicyRunner, get_runner
 from roboverse_learn.algorithms.utils.train_data_selector import reorder_init_states
 
+input_action_seq = [
+    "panda_finger_joint1",
+    "panda_finger_joint2",
+    "panda_joint1",
+    "panda_joint3",
+    "panda_joint6",
+    "panda_joint7",
+    "panda_joint2",
+    "panda_joint4",
+    "panda_joint5",
+]
+
+desired_action_seq = [
+    "panda_finger_joint1",
+    "panda_finger_joint2",
+    "panda_joint1",
+    "panda_joint2",
+    "panda_joint3",
+    "panda_joint4",
+    "panda_joint5",
+    "panda_joint6",
+    "panda_joint7",
+]
 
 @dataclass
 class Args:
@@ -142,6 +166,7 @@ def main():
         subset=args.subset,
     )
     action_set_steps = 2 if policyRunner.policy_cfg.action_config.action_type == "ee" else 1
+
     if use_pcd(policyRunner.yaml_cfg):
         try:
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
@@ -149,7 +174,7 @@ def main():
 
             sys.path.append(".")
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
-        pnt_cloud_getter = PntCloudGetter(args.task.split("_")[0], use_point_crop=True)
+        pnt_cloud_getter = PntCloudGetter("Realworld_" + args.task.split("_")[0], use_point_crop=True)
         """
         temp_dict = {
             "cam_pos": [1.5, 0.0, 1.5],
@@ -202,10 +227,11 @@ def main():
                 "joint_qpos": obs.agent_pos.squeeze(1),
             }
             if use_rgbd(policyRunner.yaml_cfg):
-                new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
+                new_obs["depth"] = obs.cameras["camera0"].depth_meter  # (50, 256, 256)
+                new_obs["depth"] = new_obs["depth"].unsqueeze(-1)  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
             if use_pcd(policyRunner.yaml_cfg):
-                depth = obs.cameras["camera0"].depth
+                depth = obs.cameras["camera0"].depth_meter
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(
@@ -214,46 +240,6 @@ def main():
                     cam_intr.cpu(),
                     cam_extr.cpu(),
                 )
-                if DEBUG_RGB:
-                    save_dir = f"./tmp/visualize/{args.task}L{args.random.level}"
-                    for i in range(num_envs):
-                        # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
-                        img = np.array(obs.cameras["camera0"].rgb[i].cpu())
-                        depth = np.array(obs.cameras["camera0"].depth[i].cpu())
-                        # 为每个 demo 创建子目录
-                        demo_idx = demo_start_idx + i
-                        demo_dir = save_dir
-                        os.makedirs(demo_dir, exist_ok=True)
-                        # 保存为 PNG
-                        file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}.png")
-                        iio.imwrite(file_path, img)
-                        depth_file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}_depth.png")
-
-                        # 假设 depth 是 numpy 数组，dtype 例如 float32 或 uint16
-                        depth_min, depth_max = depth.min(), depth.max()
-                        if depth_max > depth_min:
-                            depth_norm = (depth - depth_min) / (depth_max - depth_min)
-                        else:
-                            # 全零或常数图像
-                            depth_norm = np.zeros_like(depth)
-                        # 归一化到 0–255，再转 uint8
-                        depth_uint8 = (depth_norm * 255).astype(np.uint8)
-                        depth_uint8 = np.squeeze(depth_uint8)
-
-                        depth_img = Image.fromarray(depth_uint8, mode="L")
-                        depth_img.save(depth_file_path)
-                    # env.close()
-                    # raise NotImplementedError()
-
-                if DEBUG_PCD:
-                    save_folder = f"./tmp/visualize/{args.task}L{args.random.level}"
-                    os.makedirs(save_folder, exist_ok=True)
-                    for idx, single_pcd in enumerate(pnt_cloud):
-                        pcd_filename = os.path.join(save_folder, f"demo_{idx:04d}_step_{step}.npy")
-                        np.save(pcd_filename, single_pcd)
-                    env.close()
-                    raise NotImplementedError("DEBUG")
-
                 new_obs["point_cloud"] = pnt_cloud
                 if not use_spUnet_pcd(policyRunner.yaml_cfg):
                     feat_dim = get_pnt_cloud_feat_dim(policyRunner.yaml_cfg)
@@ -261,11 +247,64 @@ def main():
 
             if use_sensor(policyRunner.yaml_cfg):
                 new_obs["sensors"] = obs.sensors  # {sensor_name: {"force": Tensor[N_env, 3]}}
+            new_obs["rgb"] = _center_crop_and_resize(
+                new_obs["rgb"].to(torch.float32), 256, 256)
+            if new_obs.get("depth", None) is not None:
+                new_obs["depth"] = _center_crop_and_resize(
+                    new_obs["depth"].to(torch.float32), 256, 256)
+            if DEBUG_RGB:
+                save_dir = f"./tmp/visualize/{args.task}L{args.random.level}"
+                for i in range(num_envs):
+                    # 取第 i 个 env 的 rgb 图像 (shape: (H, W, 3))
+                    img = np.array(new_obs["rgb"][i].cpu())
+                    #depth = np.array(new_obs["depth"][i].cpu())
+                    # 为每个 demo 创建子目录
+                    demo_idx = demo_start_idx + i
+                    demo_dir = save_dir
+                    os.makedirs(demo_dir, exist_ok=True)
+                    # 保存为 PNG
+                    print(f"Img shape: {img.shape}, dtype: {img.dtype}, min: {img.min()}, max: {img.max()}")
+                    img = img.astype(np.uint8)  # 确保图像是 uint8 类型
+                    file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}.png")
+                    iio.imwrite(file_path, img)
+                    #depth_file_path = os.path.join(demo_dir, f"demo_{demo_idx:04d}_depth.png")
+
+                    # 假设 depth 是 numpy 数组，dtype 例如 float32 或 uint16
+                    # depth_min, depth_max = depth.min(), depth.max()
+                    # if depth_max > depth_min:
+                    #     depth_norm = (depth - depth_min) / (depth_max - depth_min)
+                    # else:
+                    #     # 全零或常数图像
+                    #     depth_norm = np.zeros_like(depth)
+                    # # 归一化到 0–255，再转 uint8
+                    # depth_uint8 = (depth_norm * 255).astype(np.uint8)
+                    # depth_uint8 = np.squeeze(depth_uint8)
+
+                    # depth_img = Image.fromarray(depth_uint8, mode="L")
+                    # depth_img.save(depth_file_path)
+                # env.close()
+                # raise NotImplementedError()
+
+            if DEBUG_PCD:
+                save_folder = f"./tmp/visualize/{args.task}L{args.random.level}"
+                os.makedirs(save_folder, exist_ok=True)
+                for idx, single_pcd in enumerate(pnt_cloud):
+                    pcd_filename = os.path.join(save_folder, f"demo_{idx:04d}_step_{step}.npy")
+                    np.save(pcd_filename, single_pcd)
+                env.close()
+                raise NotImplementedError("DEBUG")
+
+
 
             images_list.append(np.array(new_obs["rgb"].cpu()))
             # for key, value in new_obs.items():
             #    print(f"Key: {key}, Value shape: {value.shape}")
             action = policyRunner.get_action(new_obs)
+            for action_step in action:
+                action_dic = action_step["franka"]["dof_pos_target"]
+                action_list = [action_dic[key] for key in desired_action_seq]
+                action_dic = {k:v for k, v in zip(input_action_seq, action_list)}
+                action_step["franka"]["dof_pos_target"] = action_dic
             for round_i in range(action_set_steps):
                 obs = env.step(action)
                 # print("Press ENTER if success", end="", flush=True)
@@ -382,6 +421,112 @@ def get_pnt_cloud_feat_dim(cfg):
         return task.shape_meta.obs.point_cloud.shape[-1]
     else:
         return cfg.dataset.obs_keys.head_camera_pnt_cloud.shape[-1]
+
+
+def _center_crop_and_resize(
+    img: torch.Tensor,
+    target_width: int,
+    target_height: int
+) -> torch.Tensor:
+    """
+    Args:
+        img (torch.Tensor): Input image tensor of shape (N, H, W, C), range [0, 255], dtype uint8.
+        target_width (int): Target width.
+        target_height (int): Target height.
+    Returns:
+        torch.Tensor: Resized image tensor of shape (N, target_height, target_width, C),
+                      range [0, 255], dtype uint8.
+    """
+    type = img.dtype
+    N, H, W, C = img.shape
+    target_ratio = target_width / target_height
+    orig_ratio = W / H
+
+    # determine crop size
+    if orig_ratio > target_ratio:
+        # input is wider → crop width
+        new_h = H
+        new_w = int(target_ratio * H)
+    else:
+        # input is taller → crop height
+        new_w = W
+        new_h = int(W / target_ratio)
+
+    # compute crop coordinates
+    left = (W - new_w) // 2
+    top = (H - new_h) // 2
+    right = left + new_w
+    bottom = top + new_h
+
+    # center crop
+    img_cropped = img[:, top:bottom, left:right, :]  # (N, new_h, new_w, C)
+
+    # prepare for interpolation: to NCHW, float
+    img_nchw = img_cropped.permute(0, 3, 1, 2).to(torch.float32)
+
+    # resize with antialiasing for better quality
+    img_resized = F.interpolate(
+        img_nchw,
+        size=(target_height, target_width),
+        mode='bilinear',
+        align_corners=False,
+        antialias=True
+    )
+
+    # back to original shape and type
+    img_out = img_resized.permute(0, 2, 3, 1).to(type)  # (N, target_height, target_width, C)
+
+    return img_out
+
+
+
+def restore_depth(depth: np.ndarray, rgb: np.ndarray = None, method: str = 'inpaint') -> np.ndarray:
+    """
+    对深度图中深度值为0的区域进行恢复。
+    - method='inpaint'：基于 Navier‑Stokes 的 inpainting。
+    - method='guided'：基于 ximgproc.guidedFilter 的深度补全。
+
+    Args:
+        depth: np.float32，深度图（米或同摄像机单位），无效值为0。
+        rgb:  np.uint8，BGR 彩色图，仅 guided 时需要。
+        method: 'inpaint' 或 'guided'。
+    Returns:
+        np.float32，恢复后的深度图。
+    """
+    mask = (depth == 0).astype(np.uint8)
+
+    if method == 'inpaint':
+        valid = depth[depth > 0]
+        if valid.size == 0:
+            return depth.copy()
+        d_min, d_max = valid.min(), valid.max()
+        depth_norm = ((depth - d_min) / (d_max - d_min) * 255).astype(np.uint8)
+        inpainted = cv2.inpaint(depth_norm, mask, inpaintRadius=5, flags=cv2.INPAINT_NS)
+        restored = inpainted.astype(np.float32) / 255 * (d_max - d_min) + d_min
+
+    elif method == 'guided':
+        if rgb is None:
+            raise ValueError("使用 'guided' 方法时必须传入对齐的 rgb 图像")
+        depth_f32 = depth.astype(np.float32)
+
+        # 调用 guidedFilter
+        try:
+            guided = cv2.ximgproc.guidedFilter(guide=rgb,
+                                               src=depth_f32,
+                                               radius=8,
+                                               eps=0.1)  # eps 根据噪声水平调整
+        except AttributeError:
+            raise RuntimeError("cv2.ximgproc.guidedFilter 不可用，请确认已安装 opencv-contrib-python")
+
+        # 保留原有有效深度
+        restored = guided
+        restored[depth > 0] = depth_f32[depth > 0]
+
+    else:
+        raise ValueError("method 必须是 'inpaint' 或 'guided'")
+
+    return restored
+
 
 
 if __name__ == "__main__":

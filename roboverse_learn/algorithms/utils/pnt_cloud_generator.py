@@ -9,6 +9,8 @@ import numpy as np
 import open3d as o3d
 from PIL import Image as PIL_Image
 
+from third_party.FoundationStereo.dinov2.dinov2.eval import depth
+
 """
 Generates numpy rotation matrix from quaternion
 
@@ -153,8 +155,7 @@ class PointCloudGenerator(object):
     def generateCroppedPointCloud(self, rgb, depth, cam_intr, cam_extr, save_img_dir=None, device_id=0, debug=False):
         od_cammat = cammat2o3d(cam_intr, self.img_width, self.img_height)
         od_depth = o3d.geometry.Image(depth)
-
-        o3d_cloud = o3d.geometry.PointCloud.create_from_depth_image(od_depth, od_cammat)
+        o3d_cloud = o3d.geometry.PointCloud.create_from_depth_image(od_depth, od_cammat, depth_scale = 1.0, depth_trunc=10.0, stride=1)
         c2w = np.linalg.inv(cam_extr)
         transformed_cloud = o3d_cloud.transform(c2w)
         # get numpy array of point cloud, (position, color)
@@ -170,6 +171,15 @@ class PointCloudGenerator(object):
         combined_cloud_colors = rgb.reshape(-1, 3)  # range [0, 255]
         if not isinstance(combined_cloud_colors, np.ndarray):
             combined_cloud_colors = combined_cloud_colors.cpu().numpy()
+        depth_map = depth[:, :, 0] if depth.shape[-1] == 1 else depth[...]
+        mask      = (depth_map > 0)               # bool, (H, W)
+        flat_mask = mask.reshape(-1)               # bool, (H*W,)
+        combined_cloud_colors = combined_cloud_colors[flat_mask]
+        # —— 5. 计算每个有效像素的 (u, v) ——
+        idxs = np.nonzero(flat_mask)[0]            # (M,)
+        us   = idxs // W                           # 行 (u)
+        vs   = idxs %  W                           # 列 (v)
+        uv   = np.stack([us, vs], axis=1)          # (M, 2)
         combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors, uv), axis=1)
         if debug:
             # print(f"RGB shape: ({H}, {W})")

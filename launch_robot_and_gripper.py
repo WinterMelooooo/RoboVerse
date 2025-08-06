@@ -4,12 +4,16 @@ import signal
 import shutil
 import sys
 import time
+import subprocess
 
 # Commands to run
 ROBOT_CMD = [
     "ros2", "launch",
     "franka_fr3_moveit_config", "moveit.launch.py",
-    "robot_ip:=172.16.0.2"
+    "robot_ip:=172.16.0.2",
+    "use_fake_hardware:=false",
+    "arm_id:=fr3",
+    # "namespace:=gripper"
 ]
 GRIPPER_CMD = [
     "ros2", "launch",
@@ -53,19 +57,27 @@ def main():
 
     print("✅ Starting robot and gripper launches with PTYs. Ctrl+C to stop.\n")
 
+    # # Spawn robot launch in a child process
+    # pid = os.fork()
+    # if pid == 0:
+    #     spawn_with_pty(ROBOT_CMD, "ROBOT")
+    # else:
+    #     # In parent, spawn gripper after
+    #     time.sleep(3)  # Give robot some time to start
+    #     try:
+    #         spawn_with_pty(GRIPPER_CMD, "GRIPPER")
+    #     except KeyboardInterrupt:
+    #         print("\n⛔ Ctrl+C pressed. Terminating robot launch...")
+    #         os.kill(pid, signal.SIGTERM)
+    #         sys.exit(0)
+
     # Spawn robot launch in a child process
-    pid = os.fork()
-    if pid == 0:
+    try:
         spawn_with_pty(ROBOT_CMD, "ROBOT")
-    else:
-        # In parent, spawn gripper after
-        time.sleep(3)  # Give robot some time to start
-        try:
-            spawn_with_pty(GRIPPER_CMD, "GRIPPER")
-        except KeyboardInterrupt:
-            print("\n⛔ Ctrl+C pressed. Terminating robot launch...")
-            os.kill(pid, signal.SIGTERM)
-            sys.exit(0)
+    except KeyboardInterrupt:
+        print("\n⛔ Ctrl+C pressed. Terminating robot launch...")
+        sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
