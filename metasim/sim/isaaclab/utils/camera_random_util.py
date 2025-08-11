@@ -1,4 +1,5 @@
 import copy
+import math
 
 import numpy as np
 from loguru import logger as log
@@ -48,6 +49,18 @@ def randomize_camera_pose(
         if task.source_benchmark == BenchmarkType.CALVIN:
             distance = 2.0
             theta_to_robot = (theta_to_robot - np.pi / 2) / 240 * 180
+    elif mode == "normal_noise":
+        #raw_randomize_camera_pos = np.array([1.5, 0, 1.5])
+        raw_randomize_camera_pos = np.array([1.1, 0.06, 1.1])
+        raw_randomize_camera_lookat = np.array([0, 0, 0])
+        randomized_camera_pose = np.random.normal(raw_randomize_camera_pos, [0.1, 0.1, 0.1], size=3)
+        randomized_camera_lookat = np.random.normal(raw_randomize_camera_lookat, [0.1, 0.1, 0.1], size=3)
+        randomized_camera.pos = randomized_camera_pose.tolist()
+        randomized_camera.look_at = randomized_camera_lookat.tolist()
+        randomized_camera.focus_distance = np.linalg.norm(
+            np.array(randomized_camera_pose) - np.array(randomized_camera_lookat)
+        )
+        return randomized_camera
 
     else:
         raise ValueError(f"Unknown mode: {mode}")

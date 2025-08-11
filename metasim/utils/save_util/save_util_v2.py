@@ -55,7 +55,7 @@ def save_demo_v2(save_dir: str, demo: list[EnvState]):
         "robot_body_state": [],
     }
     sensordata = {
-        "sensor_dict":{name: [] for name in sensor_names},
+        "sensor_dict": {name: [] for name in sensor_names},
         "sensor_dict_target": {name: [] for name in sensor_names},
     }
     # Process each timestep

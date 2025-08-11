@@ -89,9 +89,9 @@ class Args:
 
 args = tyro.cli(Args)
 
-DEBUG_RGB = False
+DEBUG_RGB = True
 DEBUG_RAND_STATE = False
-DEBUG_PCD = False
+DEBUG_PCD = True
 
 
 def main():
@@ -242,7 +242,6 @@ def main():
         images_list = []
         while step < MaxStep:
             log.debug(f"Step {step}")
-            print(obs)
             new_obs = {
                 "rgb": obs.cameras["camera0"].rgb,
                 "joint_qpos": obs.robots[args.robot].joint_pos,

@@ -29,11 +29,17 @@ class RobotImageDataset(BaseImageDataset):
         batch_size=64,
         max_train_episodes=None,
         max_visible_ratio=100,
+        cotraining = False,
+        real_world_zarr_path=None,
+        real_world_ratio = 0.0,
     ):
 
         super().__init__()
         # cprint(zarr_path, "red")
         # cprint(batch_size, "red")
+        print(f"Using cotraining: {cotraining}")
+        print(f"Using simulation data from {zarr_path} with ratio {max_visible_ratio}%")
+        print(f"Using real world data from {real_world_zarr_path} with ratio {real_world_ratio}%")
         self.replay_buffer:ReplayBuffer = ReplayBuffer.copy_from_path(
             zarr_path,
             # keys=['head_camera', 'front_camera', 'left_camera', 'right_camera', 'state', 'action'],
@@ -43,8 +49,15 @@ class RobotImageDataset(BaseImageDataset):
         keep_n_episodes = self.replay_buffer.n_episodes * max_visible_ratio / 100.0
         while self.replay_buffer.n_episodes > keep_n_episodes:
             self.replay_buffer.pop_episode()
-        print(f"Using {self.replay_buffer.n_episodes} episodes for training and validation.")
-
+        if cotraining:
+            assert real_world_zarr_path is not None and real_world_ratio > 0.0, "real_world_zarr_path must be provided for cotraining."
+            self.replay_buffer.add_from_path(real_world_zarr_path)
+            now_n_episodes = (self.replay_buffer.n_episodes - keep_n_episodes) * real_world_ratio / 100.0 + keep_n_episodes
+            while self.replay_buffer.n_episodes > now_n_episodes:
+                self.replay_buffer.pop_episode()
+            print(f"Using {keep_n_episodes} simulation episodes and {self.replay_buffer.n_episodes - keep_n_episodes} real world episodes for training and validation.")
+        else:
+            print(f"Using {self.replay_buffer.n_episodes} episodes for training and validation.")
         val_mask = get_val_mask(n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed)
         train_mask = ~val_mask
         train_mask = downsample_mask(mask=train_mask, max_n=max_train_episodes, seed=seed)

@@ -30,6 +30,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         imagenet_norm: bool = False,
         test_rescale: bool = False,
         name=None,
+        use_img_encoder=True,
     ):
         """
         Assumes rgb input: B,C,H,W

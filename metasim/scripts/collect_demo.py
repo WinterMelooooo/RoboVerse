@@ -41,9 +41,7 @@ class Args:
     """Robot name"""
     num_envs: int = 1
     """Number of parallel environments, find a proper number for best performance on your machine"""
-    sim: Literal[
-        "isaaclab", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"
-    ] = "isaaclab"
+    sim: Literal["isaaclab", "mujoco", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3"] = "isaaclab"
     """Simulator backend"""
     demo_start_idx: int | None = None
     """The index of the first demo to collect, None for all demos"""
@@ -79,9 +77,7 @@ class Args:
             "At least one of run_all, run_unfinished, or run_failed must be True"
         )
         if self.random.table and not self.table:
-            log.warning(
-                "Cannot enable table randomization without a table, disabling table randomization"
-            )
+            log.warning("Cannot enable table randomization without a table, disabling table randomization")
             self.random.table = False
 
         if self.max_demo_idx is None:
@@ -133,22 +129,15 @@ def get_actions(
     action_idxs = env.episode_length_buf
 
     actions = [
-        all_actions[demo_idx][action_idx]
-        if action_idx < len(all_actions[demo_idx])
-        else all_actions[demo_idx][-1]
+        all_actions[demo_idx][action_idx] if action_idx < len(all_actions[demo_idx]) else all_actions[demo_idx][-1]
         for demo_idx, action_idx in zip(demo_idxs, action_idxs)
     ]
     return actions
 
 
-def get_run_out(
-    all_actions, env: EnvWrapper[BaseSimHandler], demo_idxs: list[int]
-) -> list[bool]:
+def get_run_out(all_actions, env: EnvWrapper[BaseSimHandler], demo_idxs: list[int]) -> list[bool]:
     action_idxs = env.episode_length_buf
-    run_out = [
-        action_idx >= len(all_actions[demo_idx])
-        for demo_idx, action_idx in zip(demo_idxs, action_idxs)
-    ]
+    run_out = [action_idx >= len(all_actions[demo_idx]) for demo_idx, action_idx in zip(demo_idxs, action_idxs)]
     return run_out
 
 
@@ -182,9 +171,7 @@ class DemoCollector:
         self.handler = handler
         self.cache: dict[int, list[dict]] = {}
         self.save_request_queue = mp.Queue()
-        self.save_proc = mp.Process(
-            target=save_demo_mp, args=(self.save_request_queue,)
-        )
+        self.save_proc = mp.Process(target=save_demo_mp, args=(self.save_request_queue,))
         self.save_proc.start()
 
         TaskName = self.handler.task.__class__.__name__.replace("Cfg", "")
@@ -192,7 +179,9 @@ class DemoCollector:
             additional_str = "-" + str(args.cust_name)
         else:
             additional_str = ""
-        self.base_save_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}-Level{args.random.level}{additional_str}/robot-{args.robot}"
+        self.base_save_dir = (
+            f"roboverse_demo/demo_{args.sim}/{TaskName}-Level{args.random.level}{additional_str}/robot-{args.robot}"
+        )
 
     def create(self, demo_idx: int, data_dict: dict):
         assert demo_idx not in self.cache
@@ -281,9 +270,7 @@ class DemoIndexer:
                 tot_success += 1
             else:
                 tot_give_up += 1
-            self.pbar.set_description(
-                f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}"
-            )
+            self.pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
             self.pbar.update(1)
             log.info(f"Demo {self._next_idx} already exists, skipping...")
             self._next_idx += 1
@@ -301,9 +288,7 @@ def main():
     handler_class = get_sim_env_class(SimType(args.sim))
     task = get_task(args.task)
     robot = get_robot(args.robot)
-    camera = PinholeCameraCfg(
-        data_types=["rgb", "depth"], pos=(1.5, 0.0, 1.5), look_at=(0.0, 0.0, 0.0)
-    )
+    camera = PinholeCameraCfg(data_types=["rgb", "depth"], pos=(1.5, 0.0, 1.5), look_at=(0.0, 0.0, 0.0))
     sensors = []
     if args.use_touch:
         import sys
@@ -329,9 +314,7 @@ def main():
     env = handler_class(scenario)
 
     ## Data
-    assert os.path.exists(task.traj_filepath), (
-        f"Trajectory file does not exist: {task.traj_filepath}"
-    )
+    assert os.path.exists(task.traj_filepath), f"Trajectory file does not exist: {task.traj_filepath}"
     init_states, all_actions, all_states = get_traj(task, robot, env.handler)
 
     tot_demo = len(all_actions)
@@ -437,15 +420,10 @@ def main():
                 log.info(f"Demo {demo_idx} in Env {env_id} succeeded!")
                 tot_success += 1
                 pbar.update(1)
-                pbar.set_description(
-                    f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}"
-                )
+                pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
 
             ## Success --> FinalizeCollectingDemo
-            if (
-                not run_out[env_id]
-                and steps_after_success[env_id] < args.tot_steps_after_success
-            ):
+            if not run_out[env_id] and steps_after_success[env_id] < args.tot_steps_after_success:
                 steps_after_success[env_id] += 1
             else:
                 ## FinalizeCollectingDemo --> NextDemo
@@ -453,9 +431,7 @@ def main():
                 collector.save(demo_idx)
                 collector.delete(demo_idx)
                 if tot_success >= args.target_num_demos:
-                    log.info(
-                        f"Collected {tot_success} demos, reaching target {args.target_num_demos}, exiting"
-                    )
+                    log.info(f"Collected {tot_success} demos, reaching target {args.target_num_demos}, exiting")
                     collector.final()
                     env.close()
 
@@ -474,12 +450,7 @@ def main():
                     ## NextDemo --> Finished
                     finished[env_id] = True
 
-        for env_id in (
-            (time_out | torch.tensor(run_out, device=time_out.device))
-            .nonzero()
-            .squeeze(-1)
-            .tolist()
-        ):
+        for env_id in (time_out | torch.tensor(run_out, device=time_out.device)).nonzero().squeeze(-1).tolist():
             if finished[env_id]:
                 continue
 
@@ -492,9 +463,7 @@ def main():
 
             if failure_count[env_id] < try_num:
                 ## Timeout --> CollectingDemo
-                log.info(
-                    f"Demo {demo_idx} failed {failure_count[env_id]} times, retrying..."
-                )
+                log.info(f"Demo {demo_idx} failed {failure_count[env_id]} times, retrying...")
                 obs, _ = env.reset(
                     states=[init_states[demo_idx] for demo_idx in demo_idxs],
                     env_ids=[env_id],
@@ -507,9 +476,7 @@ def main():
                 failure_count[env_id] = 0
                 tot_give_up += 1
                 pbar.update(1)
-                pbar.set_description(
-                    f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}"
-                )
+                pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
 
                 if demo_indexer.next_idx < max_demo:
                     ## NextDemo --> CollectingDemo
@@ -531,6 +498,7 @@ def main():
     collector.final()
     env.close()
 
+
 def print_obs(obs):
     for key, value in obs.items():
         if isinstance(value, torch.Tensor):
@@ -542,6 +510,7 @@ def print_obs(obs):
         else:
             log.info(f"{key}:")
             print_obs(value)
+
 
 if __name__ == "__main__":
     main()

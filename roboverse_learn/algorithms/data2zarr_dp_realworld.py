@@ -1,0 +1,512 @@
+import argparse
+import json
+import logging
+import os
+import shutil
+import sys
+
+import imageio.v2 as iio
+import numpy as np
+import torch
+import zarr
+from tqdm import tqdm
+
+sys.path.append(".")
+from roboverse_learn.algorithms.utils.img_processing import _center_crop_and_resize
+
+try:
+    from pytorch3d import transforms
+except ImportError:
+    pass
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Process Meta Data To ZARR For Diffusion Policy."
+    )
+    parser.add_argument(
+        "--task_name",
+        type=str,
+        default="StackCube_franka",
+        help="The name of the task (e.g., StackCube_franka)",
+    )
+    parser.add_argument(
+        "--expert_data_num",
+        type=int,
+        default=200,
+        help="Number of episodes to process (e.g., 200)",
+    )
+    parser.add_argument(
+        "--metadata_dir",
+        type=str,
+        default="~/RoboVerse/data_isaaclab/demo/StackCube/robot-franka",
+        help="The path of metadata",
+    )
+    parser.add_argument(
+        "--downsample_ratio",
+        type=int,
+        default=1,
+        help="The downsample ratio of metadata",
+    )
+
+    parser.add_argument(
+        "--observation_space",
+        type=str,
+        default="joint_pos",
+        choices=["joint_pos", "ee"],
+        help="The observation space to use (e.g., joint_pos, ee)",
+    )
+    parser.add_argument(
+        "--action_space",
+        type=str,
+        default="joint_pos",
+        choices=["joint_pos", "ee"],
+        help="The action space to use (e.g., joint_pos, ee)",
+    )
+
+    parser.add_argument("--delta_ee", type=int, choices=[0, 1], default=0)
+
+    parser.add_argument(
+        "--joint_pos_padding",
+        type=int,
+        default=0,
+        help="If > 0, pad joint positions to this length when using joint_pos observation/action space",
+    )
+
+    parser.add_argument("--store_rgbd", type=int, choices=[0, 1], default=0)
+
+    parser.add_argument("--store_pnt_cloud", type=int, choices=[0, 1], default=0)
+
+    args = parser.parse_args()
+
+    args.store_rgbd = args.store_rgbd or args.store_pnt_cloud
+    task_name = args.task_name
+    num = args.expert_data_num
+    load_dir = args.metadata_dir
+    downsample_ratio = args.downsample_ratio
+
+    print("Metadata load dir:", load_dir)
+    save_dir = f"data_policy/{task_name}_{num}.zarr"
+    print("ZARR save dir:", save_dir)
+
+    demo_dir = os.path.join(load_dir, f"demo_{0:04d}")
+    find_sensordata = False
+    if "sensordata.json" in os.listdir(demo_dir):
+        logging.info("Detected sensordata.json files. Saving sensordata to ZARR")
+        demo_sensordata = json.load(
+            open(os.path.join(demo_dir, "sensordata.json"), encoding="utf-8")
+        )
+        names = list(demo_sensordata["sensor_dict_target"].keys())
+        next_sensor_arrays_dict = {name: [] for name in names}
+        pres_sensor_arrays_dict = {name: [] for name in names}
+        find_sensordata = True
+
+    if os.path.exists(save_dir):
+        shutil.rmtree(save_dir)
+
+    zarr_root = zarr.group(save_dir)
+    zarr_data = zarr_root.create_group("data")
+    zarr_meta = zarr_root.create_group("meta")
+
+    # ZARR datasets will be created dynamically during the first batch write
+    compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
+
+    # Batch processing settings
+    batch_size = 1
+    head_camera_arrays = []
+    action_arrays = []
+    state_arrays = []
+    episode_ends_arrays = []
+    total_count = 0
+    current_batch = 0
+    # current_demo_index = 0
+    if args.store_rgbd:
+        head_camera_depth_arrays = []
+    if args.store_pnt_cloud:
+        from utils.pnt_cloud_getter import PntCloudGetter
+
+        head_camera_pnt_cloud_arrays = []
+        pnt_cloud_getter = PntCloudGetter(
+            args.task_name.split("_")[0], use_point_crop=True
+        )
+
+    if (
+        args.joint_pos_padding > 0
+        and args.observation_space == "ee"
+        and args.action_space == "ee"
+    ):
+        logging.warning(
+            "Padding is not supported for ee observation and action spaces."
+        )
+
+    for current_ep in range(num):
+        print(f"Processing episode {current_ep}/{num - 1}...")
+        demo_id = str(current_ep).zfill(4)
+        demo_dir = os.path.join(load_dir, f"demo_{demo_id}")
+        # current_ep += 1
+
+        if not os.path.isdir(demo_dir):
+            print(f"Skipping episode {current_ep} as it does not exist.")
+            continue
+        else:
+            demo_id = str(current_ep).zfill(4)
+            demo_dir = os.path.join(load_dir, f"demo_{demo_id}")
+            # current_demo_index += 1
+
+        with open(os.path.join(demo_dir, "metadata.json"), encoding="utf-8") as f:
+            # print("metadata load dir:", demo_dir)
+            metadata = json.load(f)
+        if find_sensordata:
+            with open(os.path.join(demo_dir, "sensordata.json"), encoding="utf-8") as f:
+                sensordata = json.load(f)
+        data_length = len(metadata["joint_qpos"])
+        rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"), memtest=False)
+        if args.store_rgbd:
+            depths = iio.mimread(
+                os.path.join(demo_dir, "depth_uint8.mp4"), memtest=False
+            )
+        for i, rgb in tqdm(
+            enumerate(rgbs),
+            total=len(rgbs),
+            desc=f"Episode {current_ep:04d} frames",
+            leave=False,  # 每个 frame 进度条结束后自动清除
+            unit="frame",
+        ):
+            if i % downsample_ratio != 0:
+                continue
+            # sensors
+            if find_sensordata:
+                next_sensor_states = sensordata["sensor_dict_target"]
+                for name in next_sensor_states.keys():
+                    next_sensor_arrays_dict[name].append(next_sensor_states[name][i])
+                pres_sensor_states = sensordata["sensor_dict"]
+                for name in pres_sensor_states.keys():
+                    pres_sensor_arrays_dict[name].append(pres_sensor_states[name][i])
+
+            # you can change state and action here
+            if args.observation_space == "joint_pos":
+                state = metadata["joint_qpos"][i]
+                # Apply padding if specified and using joint_pos
+                if args.joint_pos_padding > 0 and len(state) < args.joint_pos_padding:
+                    padding = np.zeros(args.joint_pos_padding - len(state))
+                    state = np.concatenate([state, padding])
+            elif args.observation_space == "ee":
+                robot_pos, robot_quat = (
+                    torch.tensor(metadata["robot_root_state"][i][0:3]),
+                    torch.tensor(metadata["robot_root_state"][i][3:7]),
+                )
+
+                # Convert both current and next EE state into local coordinates
+                local_ee_pos = transforms.quaternion_apply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state"][i][0:3]) - robot_pos,
+                )
+                local_ee_quat = transforms.quaternion_multiply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state"][i][3:7]),
+                )
+
+                gripper_state = metadata["joint_qpos"][i][-2:]
+                state = np.concatenate([local_ee_pos, local_ee_quat, gripper_state])
+                assert state.shape == (9,)
+            else:
+                raise ValueError(f"Unknown observation space: {args.observation_space}")
+
+            if args.action_space == "joint_pos":
+                action = metadata["joint_qpos_target"][i]
+                # Apply padding if specified and using joint_pos
+                if args.joint_pos_padding > 0 and len(action) < args.joint_pos_padding:
+                    padding = np.zeros(args.joint_pos_padding - len(action))
+                    action = np.concatenate([action, padding])
+            elif args.action_space == "ee":
+                robot_pos, robot_quat = (
+                    torch.tensor(metadata["robot_root_state"][i][0:3]),
+                    torch.tensor(metadata["robot_root_state"][i][3:7]),
+                )
+
+                # Convert both current and next EE state into local coordinates
+                local_ee_pos = transforms.quaternion_apply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state"][i][0:3]) - robot_pos,
+                )
+                local_next_ee_pos = transforms.quaternion_apply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state_target"][i][0:3]) - robot_pos,
+                )
+
+                local_ee_quat = transforms.quaternion_multiply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state"][i][3:7]),
+                )
+                local_next_ee_quat = transforms.quaternion_multiply(
+                    transforms.quaternion_invert(robot_quat),
+                    torch.tensor(metadata["robot_ee_state_target"][i][3:7]),
+                )
+                gripper_action = metadata["joint_qpos_target"][i][-2:]
+
+                if not args.delta_ee:
+                    action = np.concatenate(
+                        [local_next_ee_pos, local_next_ee_quat, gripper_action]
+                    )
+                else:
+                    # Compute the delta in local coordinates
+                    local_ee_delta_pos = local_next_ee_pos - local_ee_pos
+                    local_ee_delta_quat = transforms.quaternion_multiply(
+                        transforms.quaternion_invert(local_ee_quat), local_next_ee_quat
+                    )
+                    action = np.concatenate(
+                        [local_ee_delta_pos, local_ee_delta_quat, gripper_action]
+                    )
+
+                assert action.shape == (9,), (
+                    f"Action shape is {action.shape}, expected (9,)"
+                )
+            else:
+                raise ValueError(f"Unknown action space: {args.action_space}")
+            if args.store_pnt_cloud:
+                depth = depths[i][:, :, 0] / 255.0  # (256,256) [0,1]
+                if (not depth.min() < 0.2) or (not depth.max() > 0.8):
+                    print(
+                        f"Depth min: {depth.min()}, max: {depth.max()} for episode {current_ep}, index {i}."
+                    )
+                    raise ValueError(
+                        f"Depth values are not in the expected range [0, 1] for episode {current_ep}, index {i}."
+                    )
+                # print(max(depth.flatten()), min(depth.flatten()), depth.shape, type(depth[0, 0]))
+                cam_intr = np.array(metadata["cam_intr"][i])
+                cam_extr = np.array(metadata["cam_extr"][i])
+                if not cam_intr.size or not cam_extr.size:
+                    print(
+                        f"Cam intr and extr are empty for episode {current_ep}, index {i}. Using default values."
+                    )
+                depth_min = metadata["depth_min"][i]
+                depth_max = metadata["depth_max"][i]
+                # depth_meter = depth_min / (1 - depth * (1 - depth_min / depth_max)) # Use this for mujoco
+                depth_meter = depth_min + (depth.astype(np.float32)) * (
+                    depth_max - depth_min
+                )
+                pnt_cloud = pnt_cloud_getter.get_point_cloud(
+                    rgb,
+                    np.ascontiguousarray(depth_meter).astype(np.float32),
+                    cam_intr,
+                    cam_extr,
+                )
+                head_camera_pnt_cloud_arrays.append(pnt_cloud)  # (N, 6) [x,y,z,r,g,b]
+
+            # Crop rgb and depth to 256x256
+            rgb = _center_crop_and_resize(
+                rgb,
+                target_width=256,
+                target_height=256,
+            )
+            if args.store_rgbd:
+                depths[i] = _center_crop_and_resize(
+                    depths[i], target_width=256, target_height=256
+                )
+
+            action = list(action)
+
+            # Append data to batch arrays
+            head_camera_arrays.append(rgb)
+            state_arrays.append(state)
+            action_arrays.append(action)
+            if args.store_rgbd:
+                depth = depths[i]
+                head_camera_depth_arrays.append(depth)  # (256,256,3) [0,255]
+
+            total_count += 1
+
+        episode_ends_arrays.append(total_count)
+        try:
+            single_rgb_tosave = np.array(head_camera_arrays[-1])
+            iio.imwrite(
+                os.path.join(save_dir, f"episode_{current_ep:04d}_rgb.png"),
+                single_rgb_tosave,
+            )
+            if args.store_rgbd:
+                single_depth_tosave = np.array(head_camera_depth_arrays[-1])
+                iio.imwrite(
+                    os.path.join(
+                        save_dir, f"episode_{current_ep:04d}_depth.png"
+                    ),
+                    single_depth_tosave,
+                )
+            if args.store_pnt_cloud:
+                pnt = head_camera_pnt_cloud_arrays[-1]
+                np.save(os.path.join(save_dir, "pnt_cloud.npy"), pnt)
+        except Exception as e:
+                print(
+                    f"Error saving point cloud for episode {current_ep}, index {i}: {e}"
+                )
+        #Write to ZARR if batch is full or if this is the last episode
+        if (current_ep + 1) % batch_size == 0 or (current_ep + 1) == num:
+            # Convert arrays to NumPy and format head_camera
+            head_camera_arrays = np.array(head_camera_arrays)
+            head_camera_arrays = np.moveaxis(head_camera_arrays, -1, 1)  # NHWC -> NCHW
+            if args.store_rgbd:
+                head_camera_depth_arrays = np.array(head_camera_depth_arrays)
+                head_camera_depth_arrays = np.moveaxis(
+                    head_camera_depth_arrays, -1, 1
+                )  # NHWC -> NCHW
+            if args.store_pnt_cloud:
+                head_camera_pnt_cloud_arrays = np.array(head_camera_pnt_cloud_arrays)
+            # print(head_camera_arrays)
+            action_arrays = np.array(action_arrays)
+            state_arrays = np.array(state_arrays)
+            episode_ends_arrays = np.array(episode_ends_arrays)
+            if find_sensordata:
+                for name in next_sensor_arrays_dict.keys():
+                    next_sensor_arrays_dict[name] = np.array(
+                        next_sensor_arrays_dict[name]
+                    )
+                for name in pres_sensor_arrays_dict.keys():
+                    pres_sensor_arrays_dict[name] = np.array(
+                        pres_sensor_arrays_dict[name]
+                    )
+
+            # Create datasets dynamically during the first write
+            if current_batch == 0:
+                zarr_data.create_dataset(
+                    "head_camera",
+                    shape=(0, *head_camera_arrays.shape[1:]),
+                    chunks=(batch_size, *head_camera_arrays.shape[1:]),
+                    dtype=head_camera_arrays.dtype,
+                    compressor=compressor,
+                    overwrite=True,
+                )
+                zarr_data.create_dataset(
+                    "state",
+                    shape=(0, state_arrays.shape[1]),
+                    chunks=(batch_size, state_arrays.shape[1]),
+                    dtype="float32",
+                    compressor=compressor,
+                    overwrite=True,
+                )
+                zarr_data.create_dataset(
+                    "action",
+                    shape=(0, action_arrays.shape[1]),
+                    chunks=(batch_size, action_arrays.shape[1]),
+                    dtype="float32",
+                    compressor=compressor,
+                    overwrite=True,
+                )
+                if args.store_rgbd:
+                    zarr_data.create_dataset(
+                        "head_camera_depth",
+                        shape=(0, *head_camera_depth_arrays.shape[1:]),
+                        chunks=(batch_size, *head_camera_depth_arrays.shape[1:]),
+                        dtype=head_camera_depth_arrays.dtype,
+                        compressor=compressor,
+                        overwrite=True,
+                    )
+                if args.store_pnt_cloud:
+                    zarr_data.create_dataset(
+                        "head_camera_pnt_cloud",
+                        shape=(0, *head_camera_pnt_cloud_arrays.shape[1:]),
+                        chunks=(batch_size, *head_camera_pnt_cloud_arrays.shape[1:]),
+                        dtype=head_camera_pnt_cloud_arrays.dtype,
+                        compressor=compressor,
+                        overwrite=True,
+                    )
+                if find_sensordata:
+                    sensors_group = zarr_data.create_group("sensors")
+                    for name in next_sensor_arrays_dict.keys():
+                        sensors_group.create_dataset(
+                            name + "_pred",
+                            shape=(0, next_sensor_arrays_dict[name].shape[1]),
+                            chunks=(batch_size, next_sensor_arrays_dict[name].shape[1]),
+                            dtype=next_sensor_arrays_dict[name].dtype,
+                            compressor=compressor,
+                            overwrite=True,
+                        )
+                        sensors_group.create_dataset(
+                            name + "_pres",
+                            shape=(0, pres_sensor_arrays_dict[name].shape[1]),
+                            chunks=(batch_size, pres_sensor_arrays_dict[name].shape[1]),
+                            dtype=pres_sensor_arrays_dict[name].dtype,
+                            compressor=compressor,
+                            overwrite=True,
+                        )
+                zarr_meta.create_dataset(
+                    "episode_ends",
+                    shape=(0,),
+                    chunks=(batch_size,),
+                    dtype="int64",
+                    compressor=compressor,
+                    overwrite=True,
+                )
+
+            # Append data to ZARR datasets
+            zarr_data["head_camera"].append(head_camera_arrays)
+            print(f"Zarr data[state].shape: {zarr_data['state'].shape}")
+            print(f"State arrays shape: {state_arrays.shape}")
+            zarr_data["state"].append(state_arrays)
+            zarr_data["action"].append(action_arrays)
+            zarr_meta["episode_ends"].append(episode_ends_arrays)
+            if args.store_rgbd:
+                zarr_data["head_camera_depth"].append(head_camera_depth_arrays)
+            if args.store_pnt_cloud:
+                zarr_data["head_camera_pnt_cloud"].append(head_camera_pnt_cloud_arrays)
+            if find_sensordata:
+                for name in next_sensor_arrays_dict.keys():
+                    zarr_data["sensors"][name + "_pred"].append(
+                        next_sensor_arrays_dict[name]
+                    )
+                    zarr_data["sensors"][name + "_pres"].append(
+                        pres_sensor_arrays_dict[name]
+                    )
+
+            print(
+                f"Batch {current_batch + 1} written with {len(head_camera_arrays)} samples."
+            )
+
+            # Clear arrays for next batch
+            head_camera_arrays = []
+            action_arrays = []
+            state_arrays = []
+            episode_ends_arrays = []
+            if args.store_rgbd:
+                head_camera_depth_arrays = []
+            if args.store_pnt_cloud:
+                head_camera_pnt_cloud_arrays = []
+            if find_sensordata:
+                for name in next_sensor_arrays_dict.keys():
+                    next_sensor_arrays_dict[name] = []
+                    pres_sensor_arrays_dict[name] = []
+            current_batch += 1
+
+    # Save metadata to a JSON file
+    metadata = {
+        "observation_space": args.observation_space,
+        "action_space": args.action_space,
+        "delta_ee": args.delta_ee,
+        "joint_pos_padding": args.joint_pos_padding,
+        "task_name": args.task_name,
+        "num_episodes": args.expert_data_num,
+        "downsample_ratio": args.downsample_ratio,
+    }
+
+    # Save metadata to zarr group
+    for key, value in metadata.items():
+        zarr_meta.attrs[key] = value
+
+    # Also save as a separate JSON file for easier access
+    metadata_path = os.path.join(save_dir, "metadata.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4)
+
+    print(f"Metadata saved to: {metadata_path}")
+
+
+def check_img(img):
+    img_shape = img.shape
+    img_dtype = img.dtype
+    img_min = img.min()
+    img_max = img.max()
+    print(
+        f"Image shape: {img_shape}, dtype: {img_dtype}, min: {img_min}, max: {img_max}"
+    )
+
+
+if __name__ == "__main__":
+    main()

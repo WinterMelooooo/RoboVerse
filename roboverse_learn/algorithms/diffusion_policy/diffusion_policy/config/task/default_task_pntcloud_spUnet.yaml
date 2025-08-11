@@ -42,6 +42,9 @@ dataset:
   max_train_episodes: null
   task_name: ${task.name}
   norm_pnt_cloud: False
+  cotraining: False
+  real_world_zarr_path: null
+  real_world_ratio: 0.0
   transform_pcd:
     - _target_: roboverse_learn.algorithms.utils.transformpcd.GridSamplePCD
       grid_size: 0.005

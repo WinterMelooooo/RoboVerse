@@ -191,6 +191,24 @@ ROBOT_ROOT_STATES = {
           0.0],
         dtype=torch.float32,
     ),
+    "RealWorld": torch.tensor(
+        [
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        dtype=torch.float32,
+    ),
 }
 
 
@@ -206,7 +224,10 @@ class RobotPointCloudDataset(BaseImageDataset):
         batch_size=64,
         max_train_episodes=None,
         max_visible_ratio=100,
-        norm_pnt_cloud=True,
+        norm_pnt_cloud=False,
+        cotraining=False,
+        real_world_zarr_path=None,
+        real_world_ratio=0.0,
     ):
         super().__init__()
         # cprint(zarr_path, "red")
@@ -220,9 +241,16 @@ class RobotPointCloudDataset(BaseImageDataset):
         keep_n_episodes = self.replay_buffer.n_episodes * max_visible_ratio / 100.0
         while self.replay_buffer.n_episodes > keep_n_episodes:
             self.replay_buffer.pop_episode()
-        print(
-            f"Using {self.replay_buffer.n_episodes} episodes for training and validation."
-        )
+        if cotraining:
+            assert real_world_zarr_path is not None and real_world_ratio > 0.0, "real_world_zarr_path must be provided for cotraining."
+            self.replay_buffer.add_from_path(real_world_zarr_path)
+            now_n_episodes = (self.replay_buffer.n_episodes - keep_n_episodes) * real_world_ratio / 100.0 + keep_n_episodes
+            while self.replay_buffer.n_episodes > now_n_episodes:
+                self.replay_buffer.pop_episode()
+            print(f"Using {keep_n_episodes} simulation episodes and {self.replay_buffer.n_episodes - keep_n_episodes} real world episodes for training and validation.")
+        else:
+            print(f"Using {self.replay_buffer.n_episodes} episodes for training and validation.")
+
         print(f"Norm point cloud: {norm_pnt_cloud}")
         val_mask = get_val_mask(
             n_episodes=self.replay_buffer.n_episodes, val_ratio=val_ratio, seed=seed
@@ -273,9 +301,8 @@ class RobotPointCloudDataset(BaseImageDataset):
             "agent_pos": self.replay_buffer["state"],
         }
         normalizer = LinearNormalizer()
-        if self.norm_pnt_cloud:
-            data["point_cloud"] = self.replay_buffer["head_camera_pnt_cloud"]
-        else:
+        data["point_cloud"] = self.replay_buffer["head_camera_pnt_cloud"]
+        if not self.norm_pnt_cloud:
             normalizer["point_cloud"] = get_identity_normalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
         normalizer["head_cam"] = get_image_range_normalizer()
@@ -367,10 +394,15 @@ def transform_point_cloud(point_cloud, robot_root_states, task_name, device=None
     if isinstance(point_cloud, np.ndarray):
         point_cloud = torch.from_numpy(point_cloud).float().cuda()
     robot_root_state = None
-    for key in robot_root_states:
-        if key.lower() in task_name.lower() or task_name.lower() in key.lower():
-            robot_root_state = robot_root_states[key]
-            break
+    if "realworld" in task_name.lower():
+        robot_root_state = torch.tensor(
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,], dtype=torch.float32,
+        )
+    else:
+        for key in robot_root_states:
+            if key.lower() in task_name.lower() or task_name.lower() in key.lower():
+                robot_root_state = robot_root_states[key]
+                break
     if device is not None:
         robot_root_state = robot_root_state.to(device)
         point_cloud = point_cloud.to(device)

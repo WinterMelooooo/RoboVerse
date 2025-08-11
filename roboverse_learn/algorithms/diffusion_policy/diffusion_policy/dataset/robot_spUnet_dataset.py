@@ -63,7 +63,10 @@ class RobotPointCloudDataset(BaseImageDataset):
         transform_pcd: List[Dict[str, Any]] = None,
         n_obs_steps=2,
         shape_meta=None,
-        norm_pnt_cloud=True,
+        norm_pnt_cloud=False,
+        cotraining = False,
+        real_world_zarr_path=None,
+        real_world_ratio = 0.0,
     ):
         super().__init__()
         # cprint(zarr_path, "red")

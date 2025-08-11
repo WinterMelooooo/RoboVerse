@@ -259,6 +259,32 @@ class ReplayBuffer:
             **kwargs,
         )
 
+    def add_from_path(
+        self,
+        zarr_path: str,
+        keys: Optional[list] = None,
+        chunks: Optional[Dict[str, tuple]] = None,
+        compressors: Union[dict, str, numcodecs.abc.Codec] = None,
+        if_exists: str = "replace",
+    ):
+        # 1. 先用 copy_from_path 把磁盘上的 zarr 读到内存或新 store
+        other = ReplayBuffer.copy_from_path(
+            zarr_path=zarr_path,
+            keys=keys,
+            chunks=chunks or {},
+            compressors=compressors or {},
+            if_exists=if_exists,
+        )
+
+        # 2. 把 other 里每个 episode 取出来，依次 add_episode 到 self
+        for epi_idx in range(other.n_episodes):
+            data = other.get_episode(epi_idx, copy=True)
+            self.add_episode(
+                data,
+                chunks=chunks,
+                compressors=compressors,
+            )
+
     # ============= save methods ===============
     def save_to_store(
         self,

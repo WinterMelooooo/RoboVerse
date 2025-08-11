@@ -150,7 +150,16 @@ class PointCloudGenerator(object):
 
         self.cam_names = cam_names
 
-    def generateCroppedPointCloud(self, rgb, depth, cam_intr, cam_extr, save_img_dir=None, device_id=0, debug=False):
+    def generateCroppedPointCloud(
+        self,
+        rgb,
+        depth,
+        cam_intr,
+        cam_extr,
+        save_img_dir=None,
+        device_id=0,
+        debug=False,
+    ):
         od_cammat = cammat2o3d(cam_intr, self.img_width, self.img_height)
         od_depth = o3d.geometry.Image(depth)
 
@@ -170,7 +179,18 @@ class PointCloudGenerator(object):
         combined_cloud_colors = rgb.reshape(-1, 3)  # range [0, 255]
         if not isinstance(combined_cloud_colors, np.ndarray):
             combined_cloud_colors = combined_cloud_colors.cpu().numpy()
-        combined_cloud = np.concatenate((combined_cloud_points, combined_cloud_colors, uv), axis=1)
+        depth_map = depth[:, :, 0] if depth.shape[-1] == 1 else depth[...]
+        mask = depth_map > 0  # bool, (H, W)
+        flat_mask = mask.reshape(-1)  # bool, (H*W,)
+        combined_cloud_colors = combined_cloud_colors[flat_mask]
+        # —— 5. 计算每个有效像素的 (u, v) ——
+        idxs = np.nonzero(flat_mask)[0]  # (M,)
+        us = idxs // W  # 行 (u)
+        vs = idxs % W  # 列 (v)
+        uv = np.stack([us, vs], axis=1)  # (M, 2)
+        combined_cloud = np.concatenate(
+            (combined_cloud_points, combined_cloud_colors, uv), axis=1
+        )
         if debug:
             # print(f"RGB shape: ({H}, {W})")
             rows = combined_cloud[:, 6].astype(np.int64)  # (N,)
@@ -235,7 +255,11 @@ class PointCloudGenerator(object):
     # Render and process an image
     def captureImage(self, camera_name, capture_depth=True, device_id=0):
         rendered_images = self.sim.render(
-            self.img_width, self.img_height, camera_name=camera_name, depth=capture_depth, device_id=device_id
+            self.img_width,
+            self.img_height,
+            camera_name=camera_name,
+            depth=capture_depth,
+            device_id=device_id,
         )
         if capture_depth:
             img, depth = rendered_images

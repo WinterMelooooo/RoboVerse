@@ -5,7 +5,7 @@ from termcolor import cprint
 from typing import Optional, Dict, Tuple, Union, List, Type
 import types
 
-def get_resnet(name, weights=None, **kwargs):
+def get_resnet(name, weights=None, freeze = False, **kwargs):
     """
     name: resnet18, resnet34, resnet50
     weights: "IMAGENET1K_V1", "r3m"
@@ -22,6 +22,14 @@ def get_resnet(name, weights=None, **kwargs):
     #     torch.nn.Linear(512, 128)
     # )
     # return resnet_new
+    if freeze:
+        if weights is None:
+            raise ValueError("If you want to freeze the model, please specify the weights")
+        for param in resnet.parameters():
+            param.requires_grad = False
+        cprint(f"[INFO] Freezing {name} model", "yellow")
+    else:
+        cprint(f"Not freezing {name} model", "yellow")
     return resnet
 
 def get_resnet_pixelwise(name, weights=None, **kwargs):

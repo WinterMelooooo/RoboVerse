@@ -24,11 +24,15 @@ seed=${15:-42}
 logger=${16:-"wandb"} # tensorboard or wandb
 consistent_warmup=${17:-1} # 1 for true, 0 for false
 backend=${18:-1} # 1 for true, 0 for false
-horizon=${19:-8} # 8 for 8 steps, 16 for 16 steps
-n_obs_steps=${20:-3} # 3 for 3 steps, 2 for 2 steps
-n_action_steps=${21:-4} # 4 for 4 steps, 8 for 8 steps
-tag="${22:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${23:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+cotrain=${19:-0} # 1 for true, 0 for false
+real_world_ratio=${20:-100} # 100 for 100% real world data,
+real_world_task_name=${21:-} # path to real world zarr data, e.g. data_policy/LiberoPickButter_obs:joint_pos_act:joint_pos_100.zarr
+real_world_data_num=${22:-50} # number of real world data, e.g. 100
+horizon=${23:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${24:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${25:-4} # 4 for 4 steps, 8 for 8 steps
+tag="${26:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${27:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
 
 
 # adding the obs and action space as additional info
@@ -53,7 +57,7 @@ echo -e "seed: ${seed}"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
-torchrun --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
+python -m torch.distributed.run --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
 roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
 task.name="${task_name}_${extra}" \
 task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
@@ -72,3 +76,6 @@ training.tag=${tag} \
 ++optimizer.multigpu_lr_policy=${multigpu_lr_policy} \
 ++logging.logger_name=${logger} \
 ++training.consistent_warmup=${consistent_warmup} \
+++task.dataset.cotraining=${cotrain} \
+++task.dataset.real_world_ratio=${real_world_ratio} \
+++task.dataset.real_world_zarr_path="data_policy/${real_world_task_name}_${extra}_${real_world_data_num}.zarr" \

@@ -53,7 +53,7 @@ echo -e "seed: ${seed}"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}
-torchrun --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
+python -m torch.distributed.run --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
 roboverse_learn/algorithms/diffusion_policy/train.py --config-name=${config_name}.yaml \
 task.name="${task_name}_${extra}" \
 task.dataset.zarr_path="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \

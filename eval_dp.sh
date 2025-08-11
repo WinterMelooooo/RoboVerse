@@ -1,9 +1,9 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-export CUDA_VISIBLE_DEVICES=1
-ckpt=info/outputs/DP/2025.07.05/17.41.09_PntCloud_DP3_PickCubeFrankaL2_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
-task=PickCube
+export CUDA_VISIBLE_DEVICES=2
+ckpt=./info/outputs/DP/2025.07.25/22.36.51_PntCloud_DP3_CloseBoxFrankaL4_obs:joint_pos_act:joint_pos/checkpoints/2000.ckpt
+task=CloseBox
 num_envs=1
-random_level=2
+random_level=4
 use_touch=0
 task_id_range_low=0
 task_id_range_high=200

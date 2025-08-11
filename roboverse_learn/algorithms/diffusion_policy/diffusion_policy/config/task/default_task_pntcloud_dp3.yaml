@@ -43,3 +43,6 @@ dataset:
   batch_size: 32
   max_train_episodes: null
   norm_pnt_cloud: False
+  cotraining: False
+  real_world_zarr_path: null
+  real_world_ratio: 0.0
