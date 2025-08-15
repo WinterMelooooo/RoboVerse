@@ -30,7 +30,7 @@ from rich.logging import RichHandler
 
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-
+from tqdm import tqdm
 from PIL import Image
 from termcolor import cprint
 
@@ -52,12 +52,12 @@ input_action_seq = [
     "panda_finger_joint1",
     "panda_finger_joint2",
     "panda_joint1",
-    "panda_joint3",
-    "panda_joint6",
-    "panda_joint7",
     "panda_joint2",
+    "panda_joint3",
     "panda_joint4",
     "panda_joint5",
+    "panda_joint6",
+    "panda_joint7",
 ]
 
 desired_action_seq = [
@@ -174,7 +174,7 @@ def main():
 
             sys.path.append(".")
             from roboverse_learn.algorithms.utils.pnt_cloud_getter import PntCloudGetter
-        pnt_cloud_getter = PntCloudGetter("Realworld_" + args.task.split("_")[0], use_point_crop=True)
+        pnt_cloud_getter = PntCloudGetter("Realworld" + args.task.split("_")[0], use_point_crop=True)
         """
         temp_dict = {
             "cam_pos": [1.5, 0.0, 1.5],
@@ -204,6 +204,14 @@ def main():
     else:
         max_demos = args.max_demo
 
+    print(f"Waiting for 5 seconds for camera exposure...")
+    hz = 30
+    sec = 5
+    for i in tqdm(range(hz * sec)):
+        vis, _ = env.camera.read_cameras()
+        time.sleep(1.0 / hz)
+
+
     for demo_start_idx in range(args.task_id_range_low, args.task_id_range_low + max_demos, num_envs):
         demo_end_idx = min(demo_start_idx + num_envs, max_demos)
         ## Reset before first step
@@ -227,11 +235,10 @@ def main():
                 "joint_qpos": obs.agent_pos.squeeze(1),
             }
             if use_rgbd(policyRunner.yaml_cfg):
-                new_obs["depth"] = obs.cameras["camera0"].depth_meter  # (50, 256, 256)
-                new_obs["depth"] = new_obs["depth"].unsqueeze(-1)  # (50, 256, 256, 1)
+                new_obs["depth"] = obs.cameras["camera0"].depth  # (50, 256, 256, 1)
                 assert new_obs["depth"].shape[3] == 1, f"Depth should be 1 channels, but got {new_obs['depth'].shape}"
             if use_pcd(policyRunner.yaml_cfg):
-                depth = obs.cameras["camera0"].depth_meter
+                depth = obs.cameras["camera0"].depth
                 cam_intr = obs.cameras["camera0"].intrinsics
                 cam_extr = obs.cameras["camera0"].extrinsics
                 pnt_cloud = pnt_cloud_getter.get_point_cloud(
@@ -438,6 +445,7 @@ def _center_crop_and_resize(
                       range [0, 255], dtype uint8.
     """
     type = img.dtype
+    #print(f"Input image shape: {img.shape}, dtype: {type}, min: {img.min()}, max: {img.max()}")
     N, H, W, C = img.shape
     target_ratio = target_width / target_height
     orig_ratio = W / H

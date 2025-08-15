@@ -14,13 +14,13 @@ from PIL import Image
 from termcolor import cprint
 import numpy as np
 cam2base = {
-    "L515": np.array(   [[-5.97678507e-03,  8.13806952e-01, -5.81104631e-01,  1.60143761e+00],
-        [ 9.99848507e-01, -4.63702700e-03, -1.67775763e-02,  2.50000001e-02],
-        [-1.63483071e-02, -5.81116786e-01, -8.13655903e-01,  1.69114334e+00],
-        [-3.71780197e-09,  6.84743024e-09, -4.15145011e-08,  1.00000008e+00]], dtype=np.float64)
+    "L515": np.array(  [[-7.37889046e-03,  7.60062505e-01, -6.49808137e-01,  1.10273651e+00],
+                    [ 9.99848507e-01, -4.63702699e-03, -1.67775763e-02,  0.600000001e-01],
+                    [-1.57651857e-02, -6.49833410e-01, -7.59913091e-01,  1.12513354e+00],
+                    [-3.71780196e-09,  6.84743026e-09, -4.15145010e-08,  1.00000008e+00]], dtype=np.float64)
 }
-
 CALIBRATION_MODE = False
+
 
 # def raw_data_to_extrinsics(cam_raw_data):
 #     rvec = np.array(cam_raw_data["rvec"], dtype=np.float32)
@@ -362,6 +362,7 @@ if __name__ == "__main__":
     obs, _ = multi_realsense.read_cameras()
     img = obs["camera0"]["rgb"]
     depth = obs["camera0"]["depth"]
+    depth_meter = depth.cpu().numpy().copy()
     #depth_meter = obs["camera0"]["depth_meter"]
     cam_intr = obs["camera0"]["intrinsics"]
     cam_extr = obs["camera0"]["extrinsics"]
@@ -373,6 +374,7 @@ if __name__ == "__main__":
     print(cam_intr)
     print(cam_extr)
     cv2.imwrite(os.path.join(save_dir, "depth.png"), depth_img)
+    np.save(os.path.join(save_dir, "depth_meter.npy"), depth_np.astype(np.float32))
     #cv2.imwrite(os.path.join(save_dir, "depth_meter.png"), depth_meter.cpu().numpy().astype(np.float32))
     #np.save(os.path.join(save_dir, "depth_meter.npy"), depth_meter.cpu().numpy().astype(np.float32))
     cv2.imwrite(os.path.join(save_dir, "rgb.png"), img.cpu().numpy()[..., ::-1])

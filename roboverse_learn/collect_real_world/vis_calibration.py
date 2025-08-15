@@ -11,7 +11,7 @@ def draw_world_frame_axes(
     axis_length: float = 1.0,
     base_thickness: int = 5,
     thickness_falloff: float = 2.0,
-    save_path: str = "output.png"
+    save_path = None
 ):
     """
     在图像上绘制世界坐标系的 X/Y/Z 轴，每条轴使用梯形：
@@ -84,7 +84,8 @@ def draw_world_frame_axes(
         cv2.fillPoly(img_out, [np.array([v1, v2, v3, v4], np.int32)], color)
 
     # 若需保存：
-    # cv2.imwrite(save_path, img_out)
+    if save_path is not None:
+        cv2.imwrite(save_path, img_out)
     return img_out
 
 def rot_matrix_from_euler(dx, dy, dz):
@@ -109,12 +110,13 @@ def main():
 
     )
 
-    c2w = np.array(   [[-5.97678504e-03,  8.13806952e-01, -5.81104631e-01,  1.25143761e+00],
-                            [ 9.99848507e-01, -4.63702697e-03, -1.67775763e-02,  7.50000000e-02],
-                            [-1.63483071e-02, -5.81116786e-01, -8.13655903e-01,  1.59114334e+00],
-                            [-3.71780198e-09,  6.84743022e-09, -4.15145011e-08,  1.00000008e+00]], dtype=np.float64)
+    c2w = np.array(   [[-9.35845577e-04,  9.48149563e-01, -3.17823159e-01,  1.03701994e+00],
+        [ 9.99848507e-01, -4.63702699e-03, -1.67775763e-02,  2.50000001e-02],
+        [-1.73814067e-02, -3.17790620e-01, -9.48001561e-01,  2.08546346e+00],
+        [-3.71780196e-09,  6.84743026e-09, -4.15145010e-08,  1.00000008e+00]], dtype=np.float64)
 
-    cam = MultiRealsenseWrapper(set_auto_exposure=False, exposure_time=1000, gain = 16)
+
+    cam = MultiRealsenseWrapper(set_auto_exposure=False, exposure_time=1000, gain = 18)
     obs, _ = cam.read_cameras()
     init_img = obs["camera0"]["rgb"].cpu().numpy()[...,::-1]
 
@@ -166,7 +168,6 @@ def main():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1, cv2.LINE_AA)
 
         print(new_c2w)
-        print(new_w2c)
 
         cv2.imshow(win, out[...,::-1])
         key = cv2.waitKey(1) & 0xFF

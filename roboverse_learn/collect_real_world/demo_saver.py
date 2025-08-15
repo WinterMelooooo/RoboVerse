@@ -58,27 +58,26 @@ def save_single_demo(save_dir: str, demo):
         jsondata["cam_extr"].append(camera_state["extrinsics"].tolist() if "extrinsics" in camera_state else [])
 
         # Extract robot data
-        jsondata["joint_qpos"].append([robot_state["dof_pos"]])
+        jsondata["joint_qpos"].append(robot_state["dof_pos"])
 
         # For targets, handle them in the same way as the original function
         ## XXX
         if next(iter(demo[0]["robots"].values())).get("dof_pos_target", None) is not None:
             if i < len(demo) - 1:
                 next_robot_state = demo[i + 1]["robots"][robot_name]
-                target_dof_pos = [
-                    next_robot_state["dof_pos_target"][k] for k in sorted(next_robot_state["dof_pos_target"].keys())
-                ]
+                target_dof_pos = next_robot_state["dof_pos_target"]
             else:
                 # For the last timestep, use the same target as the current state
-                target_dof_pos = [
-                    robot_state["dof_pos_target"][k] for k in sorted(robot_state["dof_pos_target"].keys())
-                ]
+                target_dof_pos = robot_state["dof_pos_target"]
         else:
-            if i < len(demo) - 1:
-                next_robot_state = demo[i + 1]["robots"][robot_name]
-                target_dof_pos = next_robot_state["dof_pos"]
-            else:
-                target_dof_pos = robot_state["dof_pos"]
+            raise ValueError(
+                f"The demo does not contain 'dof_pos_target' in robot states. what we've got is: {next(iter(demo[0]['robots'].values())).keys()}"
+            )
+            # if i < len(demo) - 1:
+            #     next_robot_state = demo[i + 1]["robots"][robot_name]
+            #     target_dof_pos = next_robot_state["dof_pos"]
+            # else:
+            #     target_dof_pos = robot_state["dof_pos"]
 
         jsondata["joint_qpos_target"].append(target_dof_pos)
 
@@ -99,9 +98,6 @@ def save_single_demo(save_dir: str, demo):
             rgb,
             np.array(intr).reshape(3, 3),
             np.array(extr).reshape(4, 4),
-            axis_length=0.5,
-            base_thickness=5,
-            arrow_tip_length=0.1,
             save_path=os.path.join(save_dir, "vis_calibration.png")
         )
         iio.imwrite(os.path.join(save_dir, "demo_rgb.png"), rgb)

@@ -9,39 +9,35 @@
 metadata_dir=${1}
 task_name=${2}
 expert_data_num=${3}
-gpu_ids=${4}
+gpu_id=${4}
 
 num_epochs=${5}
 obs_space=${6} # joint_pos or ee
 act_space=${7} # joint_pos or ee
 delta_ee=${8:-0} # 0 or 1 (only matters if act_space is ee, 0 means absolute 1 means delta control )
-config_name=${9:-"robot_act_rgb"}
-master_port=${10:-50023}
-seed=${11:-42}
-backend=${12:-"Gloo"}
+
+alg_name=ACT
+seed=42
+
 
 extra="obs:${obs_space}_act:${act_space}"
 if [ "${delta_ee}" = 1 ]; then
   extra="${extra}_delta"
 fi
+#python roboverse_learn/algorithms/data2zarr_dp.py \
+#--task_name ${task_name}_${extra} \
+#--expert_data_num ${expert_data_num} \
+#--metadata_dir ${metadata_dir} \
+#--action_space ${act_space} \
+#--observation_space ${obs_space} \
+#--delta_ee ${delta_ee}
 
 
-
-echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
-echo -e "master port: ${master_port}"
-echo -e "seed: ${seed}"
-if [ "${backend,,}" = "nccl" ]; then
-  echo "Using NCCL backend, enabling NCCL debug and parallel launch mode"
-  export NCCL_LAUNCH_MODE=PARALLEL
-fi
-NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
-export HYDRA_FULL_ERROR=1
-export CUDA_VISIBLE_DEVICES=${gpu_ids}
-torchrun --nproc_per_node=${NPROC} --nnodes=1 --master_port=${master_port} \
--m roboverse_learn.algorithms.act.train --config-name=${config_name}.yaml \
-task_name=${task_name}_${extra} \
-dataset.dataset_dir="data_policy/${task_name}_${extra}_${expert_data_num}.zarr" \
-training.num_epochs=${num_epochs} \
-training.seed=${seed} \
-dataset.num_episodes=${expert_data_num} \
-++backend=${backend} \
+export CUDA_VISIBLE_DEVICES=${gpu_id}
+python -m roboverse_learn.algorithms.act.train \
+--task_name ${task_name}_${extra} \
+--num_episodes ${expert_data_num} \
+--dataset_dir data_policy/${task_name}_${extra}_${expert_data_num}.zarr \
+--policy_class ${alg_name} --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 \
+--num_epochs ${num_epochs}  --lr 1e-5 --state_dim 9 \
+--seed ${seed}

@@ -8,7 +8,7 @@ import tqdm
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from omegaconf import OmegaConf
-from algorithms.utils.attr_dict import AttrDict
+from roboverse_learn.algorithms.utils.attr_dict import AttrDict
 
 os.environ["WANDB_SILENT"] = "True"
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
@@ -41,7 +41,7 @@ class RealWorldEnv:
         use_server_robot=True
     ):
         # camera
-        self.camera = MultiRealsenseWrapper()
+        self.camera = MultiRealsenseWrapper(set_auto_exposure=False, exposure_time=1000, gain = 16)
         if use_server_robot:
             self.robot = FrankaRobotClient()
         else:
@@ -58,13 +58,18 @@ class RealWorldEnv:
         # import pdb; pdb.set_trace()
         self.robot.goto(action)
         # After execution
+        time_start = time.time()
         cam_dict = self.camera()
+        time_mid = time.time()
         robot_state = torch.tensor(self.robot.get_state())
+        time_end = time.time()
+        print(f"Time taken for camera: 1/{int(1/(time_mid - time_start))} seconds")
+        print(f"Time taken for robot state: 1/{int(1/(time_end - time_mid))} seconds")
         obs_dict = {
             "agent_pos": robot_state.unsqueeze(0).to(self.device),
             "cameras": cam_dict
         }
-        if not len(obs_dict["cameras"]["camera0"]["depth"].shape) == 3:
+        if  len(obs_dict["cameras"]["camera0"]["depth"].shape) == 2:
             obs_dict["cameras"]["camera0"]["depth"] = obs_dict["cameras"]["camera0"]["depth"].unsqueeze(-1)
         if (
             not obs_dict["cameras"]["camera0"]["rgb"].shape[-1] == 3
@@ -89,13 +94,22 @@ class RealWorldEnv:
         # ======== INIT ==========
         cam_dict = self.camera()
         robot_state = torch.tensor(self.robot.get_state())
-        agent_pos = robot_state.to(self.device)
         obs_dict = {
             "agent_pos": robot_state.unsqueeze(0).to(self.device),
             "cameras": cam_dict
         }
+        if len(obs_dict["cameras"]["camera0"]["depth"].shape) == 2:
+            obs_dict["cameras"]["camera0"]["depth"] = obs_dict["cameras"]["camera0"]["depth"].unsqueeze(-1)
+        if (
+            not obs_dict["cameras"]["camera0"]["rgb"].shape[-1] == 3
+            or not obs_dict["cameras"]["camera0"]["depth"].shape[-1] == 1
+            or not len(obs_dict["cameras"]["camera0"]["rgb"].shape) == 3
+            or not len(obs_dict["cameras"]["camera0"]["depth"].shape) == 3
+        ):
+            raise ValueError(
+                f"Please check the camera output shape. Expected RGB shape: (H, W, C) and Depth shape: (H, W, C), but got {obs_dict['cameras']['camera0']['rgb'].shape} and {obs_dict['cameras']['camera0']['depth'].shape}"
+            )
         obs_dict = dict_apply(obs_dict, lambda x: torch.from_numpy(x) if isinstance(x, np.ndarray) else x)
-        print(f"obs_dict: {obs_dict}")
         obs_dict = dict_apply(obs_dict, lambda x: x.unsqueeze(0).to(self.device))
         obs_dict = AttrDict.from_dict(obs_dict)  # Convert the entire obs_dict to AttrDict for consistency
         return obs_dict
@@ -158,7 +172,7 @@ class RealWorldEnv:
             action[robot_name]["dof_pos_target"][joint_name] for joint_name in robot_joint_name_sequence
         ]
         gripper_state = [
-            action[robot_name]["dof_pos_target"][joint_name].item() for joint_name in gripper_joint_name_sequence
+            action[robot_name]["dof_pos_target"][joint_name] for joint_name in gripper_joint_name_sequence
         ]
         action = gripper_state + robot_state
         return action

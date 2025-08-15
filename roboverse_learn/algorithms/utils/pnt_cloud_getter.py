@@ -56,17 +56,42 @@ ENV_POINT_CLOUD_CONFIG = {
     "RealworldLibero": {
         "min_bound": [
             -0.16,
-            -0.44,
-            -0.15,  # 0.00
+            -0.40,
+            0,  # 0.00
         ],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
-        "max_bound": [0.75, 0.55, 100],  # gt approxiamately [0.75, 2.45, 0.98]
+        "max_bound": [100, 0.56, 100],  # gt approxiamately [0.75, 2.45, 0.98]
         "num_points": 4096,
         "point_sampling_method": "fps",
         "cam_names": ["top"],
         "transform": None,
         "scale": np.array([1, 1, 1]),
         "offset": np.array([0, 0, 0]),
+        "additional_cropping_box": {
+            "bbox_1":{
+                "min_bound": [-100, 0.18, 0.0],
+                "max_bound": [0.20, 100, 100],
+            },
+            "bbox_2":{
+                "min_bound": [-100, -100, 0.0],
+                "max_bound": [0.20, -0.10, 100],
+            }
+        }
     },
+    "NoBox":{
+        "min_bound": [
+            -100,
+            -100,
+            -100,  # 0.00
+        ],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
+        "max_bound": [100, 100, 100],  # gt approxiamately [0.75, 2.45, 0.98]
+        "num_points": 4096,
+        "point_sampling_method": "fps",
+        "cam_names": ["top"],
+        "transform": None,
+        "scale": np.array([1, 1, 1]),
+        "offset": np.array([0, 0, 0]),
+
+    }
 }
 
 BBOX_OFFSET_DIC = {1: [0.0, 0.0, 0.0], 25: [8.0, -8.01, 0.0], 50: [14.3, -12.01, 0.0]}
@@ -135,6 +160,9 @@ class PntCloudGetter:
         # point cloud cropping
         self.min_bound = self.env_cfg[task_name].get("min_bound", None)
         self.max_bound = self.env_cfg[task_name].get("max_bound", None)
+        self.additional_cropping_box = self.env_cfg[task_name].get(
+            "additional_cropping_box", None
+        )
         if self.min_bound is not None:
             self.min_bound = np.array(self.min_bound) + np.array(
                 BBOX_OFFSET_DIC[num_envs]
@@ -143,6 +171,17 @@ class PntCloudGetter:
             self.max_bound = np.array(self.max_bound) + np.array(
                 BBOX_OFFSET_DIC[num_envs]
             )
+        if self.additional_cropping_box is not None:
+            temp_additional_cropping_box = {}
+            for bbox_name, bbox in self.additional_cropping_box.items():
+                bbox["min_bound"] = np.array(bbox["min_bound"]) + np.array(
+                    BBOX_OFFSET_DIC[num_envs]
+                )
+                bbox["max_bound"] = np.array(bbox["max_bound"]) + np.array(
+                    BBOX_OFFSET_DIC[num_envs]
+                )
+                temp_additional_cropping_box[bbox_name] = bbox
+            self.additional_cropping_box = temp_additional_cropping_box
         self.use_point_crop = use_point_crop
         cprint(
             f"[MujocoPointcloudWrapper] use_point_crop: {self.use_point_crop}", "green"
@@ -198,7 +237,17 @@ class PntCloudGetter:
                 if self.max_bound is not None:
                     mask = np.all(point_cloud[:, :3] < self.max_bound, axis=1)
                     point_cloud = point_cloud[mask]
-
+                if self.additional_cropping_box is not None:
+                    # mask_out 表示「需要被排除」的点
+                    mask_out = np.zeros(point_cloud.shape[0], dtype=bool)
+                    for bbox in self.additional_cropping_box.values():
+                        in_box = (
+                            np.all(point_cloud[:, :3] >= bbox["min_bound"], axis=1)
+                            & np.all(point_cloud[:, :3] <= bbox["max_bound"], axis=1)
+                        )
+                        mask_out |= in_box
+                    # 最终保留：在主边界内且不在任何额外裁剪箱内的点
+                    point_cloud = point_cloud[~mask_out]
             # sampling to fixed number of points
             point_cloud = point_cloud_sampling(
                 point_cloud=point_cloud,
