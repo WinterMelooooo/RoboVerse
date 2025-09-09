@@ -35,6 +35,7 @@ from metasim.utils.setup_util import (
     get_task,
     get_wrapper_class,
 )
+from metasim.utils.traj_randomization_util import randomize_objects_and_traj
 from roboverse_learn.algorithms import PolicyRunner, get_runner
 from roboverse_learn.algorithms.utils.train_data_selector import reorder_init_states
 
@@ -79,6 +80,8 @@ class Args:
     """Env wrapper to use"""
     use_touch: bool = False
     """Use touch sensor"""
+    randomize_pos: bool = False
+    """Use position randomization"""
 
     def __post_init__(self):
         if self.random.table and not self.table:
@@ -89,15 +92,15 @@ class Args:
 
 args = tyro.cli(Args)
 
-DEBUG_RGB = True
+DEBUG_RGB = False
 DEBUG_RAND_STATE = False
-DEBUG_PCD = True
+DEBUG_PCD = False
 
 
 def main():
     num_envs: int = args.num_envs
     log.info(f"Using GPU device: {args.gpu_id}")
-
+    log.info(f"Debug: pcd:{DEBUG_PCD}, rgb:{DEBUG_RGB}, rand_state:{DEBUG_RAND_STATE}")
     task = get_task(args.task)
     task.episode_length = args.action_set_steps * args.max_step
     robot = get_robot(args.robot)
@@ -177,6 +180,93 @@ def main():
     tic = time.time()
     assert os.path.exists(task.traj_filepath), f"Trajectory file: {task.traj_filepath} does not exist."
     init_states, all_actions, all_states = get_traj(task, robot, env.handler)
+    randomization_config = {
+        "butter": {
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 90, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "basket": {
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "tomato_sauce":{
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "orange_juice":{
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "chocolate_pudding":{
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "bbq_sauce":{
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "ketchup":{
+            "pos_randomization": {
+                "method": "uniform",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        }
+    }
+    #init_states, _, _ = randomize_objects_and_traj(init_states, all_actions=all_actions, all_states=all_states, randomization_cfg=randomization_config, rand_traj=False)
     mapping_json_path = os.path.join(
         "./roboverse_demo/demo_isaaclab",
         f"{args.task}-Level{args.random.level}",

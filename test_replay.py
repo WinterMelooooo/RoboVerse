@@ -2,7 +2,7 @@ import json
 import os
 
 import imageio as iio
-
+import numpy as np
 from metasim.cfg.randomization import RandomizationCfg
 from metasim.cfg.render import RenderCfg
 from metasim.cfg.robots.base_robot_cfg import BaseRobotCfg
@@ -41,7 +41,9 @@ scenario = ScenarioCfg(
 env = handler_class(scenario)
 
 data = json.load(open(metadata_path, "r"))
-actions = data["joint_qpos_target"]
+target_actions = data["joint_qpos_target"]
+#target_actions = data["robot_ee_state_target"]
+actions = data["joint_qpos"]
 # data_input_seq = [
 #     "panda_finger_joint1",
 #     "panda_finger_joint2",
@@ -84,6 +86,15 @@ for action in actions:
     obs = state_tensor_to_nested(env.handler, obs)
     rgb = obs[0]["cameras"]["camera0"]["rgb"]
     rgbs.append(rgb.cpu().numpy())
+
+obs, extras = env.reset(states=[init_states[demo_idx] for demo_idx in demo_idxs])
+for i, action in enumerate(target_actions):
+    action = {k: v for k, v in zip(data_input_seq, action)}
+    action = [{"franka": {"dof_pos_target": action}}]
+    obs, reward, success, time_out, extras = env.step(action)
+    obs = state_tensor_to_nested(env.handler, obs)
+    rgb = obs[0]["cameras"]["camera0"]["rgb"]
+    rgbs[i] = np.concatenate((rgbs[i], rgb.cpu().numpy()), axis=1)
 
 iio.mimsave(os.path.join("/home/ghr/yktang/RoboVerse/tmp", "replay.mp4"), rgbs, fps=30, quality=10)
 env.close()

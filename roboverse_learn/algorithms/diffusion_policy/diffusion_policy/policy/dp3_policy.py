@@ -172,6 +172,7 @@ class DP3(BasePolicy):
         """
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
+        normed_pcd = nobs['point_cloud']
         # this_n_point_cloud = nobs['imagin_robot'][..., :3] # only use coordinate
         if not self.use_pc_color:
             nobs['point_cloud'] = nobs['point_cloud'][..., :3]
@@ -245,7 +246,6 @@ class DP3(BasePolicy):
 
     def compute_loss(self, batch):
         # normalize input
-
         nobs = self.normalizer.normalize(batch['obs'])
         nactions = self.normalizer['action'].normalize(batch['action'])
 

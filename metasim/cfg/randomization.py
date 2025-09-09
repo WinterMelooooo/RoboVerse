@@ -25,14 +25,14 @@ class RandomizationCfg:
     """Add wall and roof, randomize wall"""
     scene: bool = False
     """Randomize scene"""
-    level: Literal[0, 1, 2, 3, 4] = 0
+    level: Literal[0, 1, 2, 3, 4, 5, 6, 7] = 0 # Level 5,6,7 are for traj rand for Sim2Real
     """Randomization level"""
     cam_randomization_strategy = "front_select"
     """Camera Randomization Strategy, only works if level >= 2"""
 
     def __post_init__(self):
         """Post-initialization configuration."""
-        assert self.level in [0, 1, 2, 3, 4]
+        assert self.level in [0, 1, 2, 3, 4, 5, 6, 7]
         if self.level >= 0:
             pass
         if self.level >= 1:

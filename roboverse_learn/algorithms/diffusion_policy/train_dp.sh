@@ -24,12 +24,11 @@ seed=${15:-42}
 logger=${16:-"wandb"} # tensorboard or wandb
 consistent_warmup=${17:-1} # 1 for true, 0 for false
 backend=${18:-1} # 1 for true, 0 for false
-horizon=${19:-8} # 8 for 8 steps, 16 for 16 steps
-n_obs_steps=${20:-3} # 3 for 3 steps, 2 for 2 steps
-n_action_steps=${21:-4} # 4 for 4 steps, 8 for 8 steps
-tag="${22:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
-output_dir=${23:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
-
+tag="${19:-}" # the number of name of checkpoint, e.g. 200 for 200.ckpt
+output_dir=${20:-} # the output directory, e.g. /home/ghr/yktang/RoboVerse/info/outputs/DP/2025.04.20/16.43.28_CloseBoxFrankaL0_obs:joint_pos_act:joint_pos
+horizon=${21:-8} # 8 for 8 steps, 16 for 16 steps
+n_obs_steps=${22:-3} # 3 for 3 steps, 2 for 2 steps
+n_action_steps=${23:-4} # 4 for 4 steps, 8 for 8 steps
 
 # adding the obs and action space as additional info
 extra="obs:${obs_space}_act:${act_space}"
@@ -50,6 +49,7 @@ fi
 echo -e "\033[33mgpu id (to use): ${gpu_ids}\033[0m"
 echo -e "master port: ${master_port}"
 echo -e "seed: ${seed}"
+echo -e "zarr dir:data_policy/${task_name}_${extra}_${expert_data_num}.zarr"
 NPROC=$(echo "${gpu_ids}" | tr ',' '\n' | wc -l)
 export HYDRA_FULL_ERROR=1
 export CUDA_VISIBLE_DEVICES=${gpu_ids}

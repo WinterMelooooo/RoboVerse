@@ -55,11 +55,11 @@ ENV_POINT_CLOUD_CONFIG = {
     },
     "RealworldLibero": {
         "min_bound": [
-            -0.16,
-            -0.40,
-            0,  # 0.00
+            -0.04,
+            -0.48,
+            0.033,  # 0.00
         ],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
-        "max_bound": [100, 0.56, 100],  # gt approxiamately [0.75, 2.45, 0.98]
+        "max_bound": [100, 0.47, 100],  # gt approxiamately [0.75, 2.45, 0.98]
         "num_points": 4096,
         "point_sampling_method": "fps",
         "cam_names": ["top"],

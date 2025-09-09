@@ -179,8 +179,8 @@ class MultiModalDataset(BaseImageDataset):
             # Transform the origin of the point cloud to robot root
             point_cloud = transform_point_cloud(point_cloud, ROBOT_ROOT_STATES, self.name, device)# B, T, 4096, 3
             last_dim = 3 if not self.pnt_cloud_with_extra else 8
-            if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == last_dim):
-                raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, {last_dim})")
+            # if not (len(point_cloud.shape) == 4 and point_cloud.shape[2] == 4096 and point_cloud.shape[3] == last_dim):
+            #     raise ValueError(f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, {last_dim})")
 
 
         if self.grid_pnt_cloud:

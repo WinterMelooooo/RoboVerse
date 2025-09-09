@@ -244,8 +244,8 @@ def main():
                     for idx, single_pcd in enumerate(pnt_cloud):
                         pcd_filename = os.path.join(save_folder, f"demo_{idx:04d}_step_{step}.npy")
                         np.save(pcd_filename, single_pcd)
-                    env.close()
-                    raise NotImplementedError("DEBUG")
+                    # env.close()
+                    # raise NotImplementedError("DEBUG")
 
                 new_obs["point_cloud"] = pnt_cloud
                 if not use_spUnet_pcd(policyRunner.yaml_cfg):

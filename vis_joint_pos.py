@@ -2,11 +2,13 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+import json
 from PIL import Image  # ✅ 新增：用于拼图
 
 # 数据集路径
-root_dir = "roboverse_demo/demo_realworld/RealworldLiberoPickButter-complex/robot-franka"
-# root_dir = "roboverse_demo/demo_isaaclab/LiberoPickButter-Level0/robot-franka"
+root_dir = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_realworld/RealworldPickBottle/robot-franka"
+# root_dir = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_isaaclab/LiberoPickButter-Level4-backup_realworld_rand/robot-franka"
+# root_dir = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_isaaclab/LiberoPickButter-Level4-backup_realworld_rand/robot-franka"
 demo_name = root_dir.split("/")[-2]
 if "-" in demo_name:
     demo_name = demo_name.split("-")[0]
@@ -18,19 +20,22 @@ demo_dirs = sorted([os.path.join(root_dir, d) for d in os.listdir(root_dir) if d
 joint_data = [[] for _ in range(9)]  # 9 个关节，每个元素是一个 list，存不同 demo 的曲线
 
 for demo_dir in demo_dirs:
-    metadata_path = os.path.join(demo_dir, "metadata.pkl")
+    metadata_path = os.path.join(demo_dir, "metadata.json")
     if not os.path.exists(metadata_path):
-        print(f"跳过 {demo_dir}（无 metadata.pkl）")
+        print(f"跳过 {demo_dir}（无 metadata.json")
         continue
 
-    with open(metadata_path, "rb") as f:
-        metadata = pickle.load(f)
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
 
     if "joint_qpos" not in metadata:
         print(f"跳过 {demo_dir}（无 joint_qpos）")
         continue
 
-    qpos = np.array(metadata["joint_qpos"])  # [T, 9]
+    qpos = np.array(metadata["joint_qpos_target"])  # [T, 9]
+    init_qpos = qpos[0, :].copy()
+    if init_qpos[0] < 0.035 or init_qpos[1] < 0.035:
+        print(f"The initial state for demo:{demo_dir} is not open, please check!.")
     for joint_idx in range(9):
         joint_data[joint_idx].append(qpos[:, joint_idx])
 
@@ -115,4 +120,4 @@ else:
 
     grid_path = os.path.join(save_dir, "joint_grid.png")
     grid.save(grid_path)
-    print(f"🧩 已生成 3×3 拼图：{grid_path}")
+    print(f"🧩 已生成拼图: {grid_path}")

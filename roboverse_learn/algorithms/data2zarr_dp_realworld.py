@@ -112,7 +112,7 @@ def main():
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
 
     # Batch processing settings
-    batch_size = 1
+    batch_size = 100
     head_camera_arrays = []
     action_arrays = []
     state_arrays = []
@@ -123,12 +123,15 @@ def main():
     if args.store_rgbd:
         head_camera_depth_arrays = []
     if args.store_pnt_cloud:
-        from utils.pnt_cloud_getter import PntCloudGetter
+        try:
+            from utils.pnt_cloud_getter import PntCloudGetter
 
-        head_camera_pnt_cloud_arrays = []
-        pnt_cloud_getter = PntCloudGetter(
-            args.task_name.split("_")[0], use_point_crop=True
-        )
+            head_camera_pnt_cloud_arrays = []
+            pnt_cloud_getter = PntCloudGetter(
+                args.task_name.split("_")[0], use_point_crop=True
+            )
+        except Exception as e:
+            print(f"Loading point cloud getter failed: {e}")
 
     if (
         args.joint_pos_padding > 0
@@ -161,6 +164,10 @@ def main():
                 sensordata = json.load(f)
         data_length = len(metadata["joint_qpos"])
         rgbs = iio.mimread(os.path.join(demo_dir, "rgb.mp4"), memtest=False)
+        if args.store_pnt_cloud:
+            pcds = None
+            if os.path.exists(os.path.join(demo_dir, "pointclouds.npy")):
+                pcds = np.load(os.path.join(demo_dir, "pointclouds.npy"))
         if args.store_rgbd:
             depths = iio.mimread(
                 os.path.join(demo_dir, "depth_uint8.mp4"), memtest=False
@@ -264,33 +271,36 @@ def main():
             else:
                 raise ValueError(f"Unknown action space: {args.action_space}")
             if args.store_pnt_cloud:
-                depth = depths[i][:, :, 0] / 255.0  # (256,256) [0,1]
-                if (not depth.min() < 0.2) or (not depth.max() > 0.8):
-                    print(
-                        f"Depth min: {depth.min()}, max: {depth.max()} for episode {current_ep}, index {i}."
+                if pcds is not None:
+                    pnt_cloud = pcds[i]
+                else:
+                    depth = depths[i][:, :, 0] / 255.0  # (256,256) [0,1]
+                    if (not depth.min() < 0.2) or (not depth.max() > 0.8):
+                        print(
+                            f"Depth min: {depth.min()}, max: {depth.max()} for episode {current_ep}, index {i}."
+                        )
+                        raise ValueError(
+                            f"Depth values are not in the expected range [0, 1] for episode {current_ep}, index {i}."
+                        )
+                    # print(max(depth.flatten()), min(depth.flatten()), depth.shape, type(depth[0, 0]))
+                    cam_intr = np.array(metadata["cam_intr"][i])
+                    cam_extr = np.array(metadata["cam_extr"][i])
+                    if not cam_intr.size or not cam_extr.size:
+                        print(
+                            f"Cam intr and extr are empty for episode {current_ep}, index {i}. Using default values."
+                        )
+                    depth_min = metadata["depth_min"][i]
+                    depth_max = metadata["depth_max"][i]
+                    # depth_meter = depth_min / (1 - depth * (1 - depth_min / depth_max)) # Use this for mujoco
+                    depth_meter = depth_min + (depth.astype(np.float32)) * (
+                        depth_max - depth_min
                     )
-                    raise ValueError(
-                        f"Depth values are not in the expected range [0, 1] for episode {current_ep}, index {i}."
+                    pnt_cloud = pnt_cloud_getter.get_point_cloud(
+                        rgb,
+                        np.ascontiguousarray(depth_meter).astype(np.float32),
+                        cam_intr,
+                        cam_extr,
                     )
-                # print(max(depth.flatten()), min(depth.flatten()), depth.shape, type(depth[0, 0]))
-                cam_intr = np.array(metadata["cam_intr"][i])
-                cam_extr = np.array(metadata["cam_extr"][i])
-                if not cam_intr.size or not cam_extr.size:
-                    print(
-                        f"Cam intr and extr are empty for episode {current_ep}, index {i}. Using default values."
-                    )
-                depth_min = metadata["depth_min"][i]
-                depth_max = metadata["depth_max"][i]
-                # depth_meter = depth_min / (1 - depth * (1 - depth_min / depth_max)) # Use this for mujoco
-                depth_meter = depth_min + (depth.astype(np.float32)) * (
-                    depth_max - depth_min
-                )
-                pnt_cloud = pnt_cloud_getter.get_point_cloud(
-                    rgb,
-                    np.ascontiguousarray(depth_meter).astype(np.float32),
-                    cam_intr,
-                    cam_extr,
-                )
                 head_camera_pnt_cloud_arrays.append(pnt_cloud)  # (N, 6) [x,y,z,r,g,b]
 
             # Crop rgb and depth to 256x256
@@ -318,22 +328,23 @@ def main():
 
         episode_ends_arrays.append(total_count)
         try:
+            os.makedirs(os.path.join(save_dir, "vis"), exist_ok=True)
             single_rgb_tosave = np.array(head_camera_arrays[-1])
             iio.imwrite(
-                os.path.join(save_dir, f"episode_{current_ep:04d}_rgb.png"),
+                os.path.join(save_dir, "vis", f"episode_{current_ep:04d}_rgb.png"),
                 single_rgb_tosave,
             )
             if args.store_rgbd:
                 single_depth_tosave = np.array(head_camera_depth_arrays[-1])
                 iio.imwrite(
                     os.path.join(
-                        save_dir, f"episode_{current_ep:04d}_depth.png"
+                        save_dir, "vis", f"episode_{current_ep:04d}_depth.png"
                     ),
                     single_depth_tosave,
                 )
             if args.store_pnt_cloud:
                 pnt = head_camera_pnt_cloud_arrays[-1]
-                np.save(os.path.join(save_dir, "pnt_cloud.npy"), pnt)
+                np.save(os.path.join(save_dir, "vis", f"episode_{current_ep:04d}_pnt_cloud.npy"), pnt)
         except Exception as e:
                 print(
                     f"Error saving point cloud for episode {current_ep}, index {i}: {e}"

@@ -93,14 +93,14 @@ ema:
   max_value: 0.9999
 
 dataloader:
-  batch_size: 32
+  batch_size: 64
   num_workers: 0
   shuffle: True
   pin_memory: True
   persistent_workers: False
 
 val_dataloader:
-  batch_size: 32
+  batch_size: 64
   num_workers: 0
   shuffle: False
   pin_memory: True
@@ -126,8 +126,8 @@ training:
   gradient_accumulate_every: 1
   use_ema: True
   rollout_every: 50
-  checkpoint_every: 2000
-  val_every: 1
+  checkpoint_every: 500
+  val_every: 50
   sample_every: 5
   max_train_steps: null
   max_val_steps: null

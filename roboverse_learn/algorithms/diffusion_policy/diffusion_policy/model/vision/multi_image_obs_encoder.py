@@ -8,7 +8,7 @@ import torchvision
 from diffusion_policy.common.pytorch_util import dict_apply, replace_submodules
 from diffusion_policy.model.common.module_attr_mixin import ModuleAttrMixin
 from diffusion_policy.model.vision.crop_randomizer import CropRandomizer
-
+from roboverse_learn.algorithms.utils.augmentation import OptionalAugment
 dic_means = {"CloseBox": 0.308515, "StackCube": 0.300145}
 dic_stds = {"CloseBox": 0.299096, "StackCube": 0.303170}
 
@@ -30,7 +30,8 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         imagenet_norm: bool = False,
         test_rescale: bool = False,
         name=None,
-        use_img_encoder=True,
+        use_img: bool = True,
+        use_augmentation: bool = False,
     ):
         """
         Assumes rgb input: B,C,H,W
@@ -125,8 +126,11 @@ class MultiImageObsEncoder(ModuleAttrMixin):
                         print(
                             f"{key} mean: {[2 * x - 1 for x in mean]}, std: {[2 * x for x in std]}"
                         )
+                this_augment = nn.Identity()
+                if use_augmentation:
+                    this_augment = OptionalAugment(enabled=True)
                 this_transform = nn.Sequential(
-                    this_resizer, this_randomizer, this_normalizer
+                    this_resizer, this_randomizer, this_augment, this_normalizer
                 )
                 key_transform_map[key] = this_transform
             elif type == "low_dim":
@@ -280,6 +284,7 @@ class MultiImageObsEncoder(ModuleAttrMixin):
         self.rgb_keys = rgb_keys
         self.low_dim_keys = low_dim_keys
         self.key_shape_map = key_shape_map
+        self.use_img = use_img
 
     def forward(self, obs_dict):
         batch_size = None
@@ -288,56 +293,59 @@ class MultiImageObsEncoder(ModuleAttrMixin):
             device = torch.device(f"cuda:{int(os.environ['LOCAL_RANK'])}")
         except Exception as e:
             device = torch.device("cuda")
-        # process rgb input
-        if self.share_rgb_model:
-            # pass all rgb obs to rgb model
-            imgs = list()
-            for key in self.rgb_keys:
-                img = obs_dict[key]
-                if batch_size is None:
-                    batch_size = img.shape[0]
-                else:
-                    assert batch_size == img.shape[0]
-                assert img.shape[1:] == self.key_shape_map[key]
-                img = self.key_transform_map[key](img)
-                imgs.append(img)
-            # (N*B,C,H,W)
-            imgs = torch.cat(imgs, dim=0)
-            # (N*B,D)
-            feature = self.key_model_map["rgb"](imgs)
-            # (N,B,D)
-            feature = feature.reshape(-1, batch_size, *feature.shape[1:])
-            # (B,N,D)
-            feature = torch.moveaxis(feature, 0, 1)
-            # (B,N*D)
-            feature = feature.reshape(batch_size, -1)
-            features.append(feature.to(device))
-        else:
-            # run each rgb obs to independent models
-            for key in self.rgb_keys:
-                img = obs_dict[key]
-                if key == "point_cloud":
-                    img = (
-                        img[:, :, :3].permute(0, 2, 1)
-                        if img.shape[2] == 6 or img.shape[2] == 3
-                        else img
-                    )
-                if batch_size is None:
-                    batch_size = img.shape[0]
-                else:
-                    assert batch_size == img.shape[0]
-                assert img.shape[1:] == self.key_shape_map[key], (
-                    f"{img.shape} vs {self.key_shape_map[key]}"
-                )
-                if hasattr(self, "preprocessor"):
-                    img, depth = self.preprocessor(img)
-                    feature = self.key_model_map[key](img, depth)
-                else:
-                    # print(f"{key}: {img.shape}")
+        if self.use_img:
+            # process rgb input
+            if self.share_rgb_model:
+                # pass all rgb obs to rgb model
+                imgs = list()
+                for key in self.rgb_keys:
+                    img = obs_dict[key]
+                    if batch_size is None:
+                        batch_size = img.shape[0]
+                    else:
+                        assert batch_size == img.shape[0]
+                    assert img.shape[1:] == self.key_shape_map[key]
                     img = self.key_transform_map[key](img)
-                    feature = self.key_model_map[key](img)
+                    imgs.append(img)
+                # (N*B,C,H,W)
+                imgs = torch.cat(imgs, dim=0)
+                # (N*B,D)
+                feature = self.key_model_map["rgb"](imgs)
+                # (N,B,D)
+                feature = feature.reshape(-1, batch_size, *feature.shape[1:])
+                # (B,N,D)
+                feature = torch.moveaxis(feature, 0, 1)
+                # (B,N*D)
+                feature = feature.reshape(batch_size, -1)
                 features.append(feature.to(device))
-                # print(f"{key}: {features[-1].device}")
+
+            else:
+                # run each rgb obs to independent models
+                for key in self.rgb_keys:
+                    img = obs_dict[key]
+                    if key == "point_cloud":
+                        img = (
+                            img[:, :, :3].permute(0, 2, 1)
+                            if img.shape[2] == 6 or img.shape[2] == 3
+                            else img
+                        )
+                    if batch_size is None:
+                        batch_size = img.shape[0]
+                    else:
+                        assert batch_size == img.shape[0]
+                    assert img.shape[1:] == self.key_shape_map[key], (
+                        f"{img.shape} vs {self.key_shape_map[key]}"
+                    )
+                    if hasattr(self, "preprocessor"):
+                        img, depth = self.preprocessor(img)
+                        feature = self.key_model_map[key](img, depth)
+                    else:
+                        # print(f"{key}: {img.shape}")
+                        img = self.key_transform_map[key](img)
+                        feature = self.key_model_map[key](img)
+                    features.append(feature.to(device))
+                    # print(f"{key}: {features[-1].device}")
+
         # process lowdim input
         for key in self.low_dim_keys:
             data = obs_dict[key]

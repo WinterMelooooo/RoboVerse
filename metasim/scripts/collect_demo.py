@@ -11,7 +11,7 @@ from __future__ import annotations
 #########################################
 from loguru import logger as log
 from rich.logging import RichHandler
-
+from metasim.utils.traj_randomization_util import randomize_objects_and_traj
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
@@ -71,6 +71,7 @@ class Args:
     """Target number of demos to collect, terminate when reached"""
     use_touch: bool = False
     """Use touch sensor, only works for some tasks and robots"""
+    use_random_traj: bool = False
 
     def __post_init__(self):
         assert self.run_all or self.run_unfinished or self.run_failed, (
@@ -313,9 +314,114 @@ def main():
     )
     env = handler_class(scenario)
 
+    init_states, all_actions, all_states = get_traj(task, robot, env.handler)
+    randomization_config = {
+        "butter": {
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 90, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "basket": {
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "tomato_sauce":{
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "orange_juice":{
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "chocolate_pudding":{
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "bbq_sauce":{
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        },
+        "ketchup":{
+            "pos_randomization": {
+                "method": "grid",
+                "std": 0.10,
+                "along_xyz": [True,True,False]
+            },
+            # "quat_randomization": {
+            #     "method": "uniform",
+            #     "std": 0.0, # In degrees
+            #     "along_xyz": [False, False, True]
+            # }
+        }
+    }
+    TaskName = env.handler.task.__class__.__name__.replace("Cfg", "")
+    if args.cust_name is not None:
+        additional_str = "-" + str(args.cust_name)
+    else:
+        additional_str = ""
+    if args.use_random_traj:
+        if args.random.level == 5:
+            randomization_config = {"butter": randomization_config["butter"]}
+        elif args.random.level == 6:
+            randomization_config = {"butter": randomization_config["butter"], "basket": randomization_config["basket"]}
+        elif args.random.level == 7:
+            randomization_config = randomization_config
+        else:
+            raise ValueError(f"Random trajectory is only supported for level 5, 6, 7, got {args.random.level}")
+        demo_root_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}-Level{args.random.level}{additional_str}/robot-{args.robot}"
+        init_states, all_actions, all_states = randomize_objects_and_traj(init_states, all_actions, all_states, randomization_config, plot_dir=demo_root_dir, save_init_states_dir=os.path.join(demo_root_dir, "init_states"), task_name=TaskName)
+
+
+
     ## Data
     assert os.path.exists(task.traj_filepath), f"Trajectory file does not exist: {task.traj_filepath}"
-    init_states, all_actions, all_states = get_traj(task, robot, env.handler)
 
     tot_demo = len(all_actions)
     if args.split == "train":
@@ -366,12 +472,7 @@ def main():
     failure_count = [0] * env.handler.num_envs
     steps_after_success = [0] * env.handler.num_envs
     finished = [False] * env.handler.num_envs
-    TaskName = env.handler.task.__class__.__name__.replace("Cfg", "")
 
-    if args.cust_name is not None:
-        additional_str = "-" + str(args.cust_name)
-    else:
-        additional_str = ""
     demo_indexer = DemoIndexer(
         save_root_dir=f"roboverse_demo/demo_{args.sim}/{TaskName}-Level{args.random.level}{additional_str}/robot-{args.robot}",
         start_idx=0,
@@ -457,6 +558,7 @@ def main():
             ## CollectingDemo --> Timeout
             demo_idx = demo_idxs[env_id]
             log.info(f"Demo {demo_idx} in Env {env_id} timed out!")
+            #collector.save(demo_idx)
             collector.mark_fail(demo_idx)
             collector.delete(demo_idx)
             failure_count[env_id] += 1

@@ -372,14 +372,15 @@ class RobotPointCloudDataset(BaseImageDataset):
             point_cloud = transform_point_cloud(
                 point_cloud, ROBOT_ROOT_STATES, self.name, device
             )  # B, T, 4096, 6
-            if not (
-                len(point_cloud.shape) == 4
-                and point_cloud.shape[2] == 4096
-                and point_cloud.shape[3] == 6
-            ):
-                raise ValueError(
-                    f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)"
-                )
+
+            # if not (
+            #     len(point_cloud.shape) == 4
+            #     and point_cloud.shape[2] == 4096
+            #     and point_cloud.shape[3] == 6
+            # ):
+            #     raise ValueError(
+            #         f"point_cloud.shape = {point_cloud.shape}, while expecting to be (B, T, 4096, 6)"
+            #     )
         return {
             "obs": {
                 "head_cam": head_cam,  # B, T, 3, H, W

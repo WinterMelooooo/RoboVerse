@@ -1,14 +1,22 @@
-sleep 1h
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
-task_name=RealworldLiberoPickButter
-config_name=robot_dp_resnet_pointnet_mutual_attention_dropout
+task_name=RealworldPour
+config_name=robot_dp_test_rgbd
 num_epochs=2000
-port=50353
+port=50370
 seed=42
-gpus=0,3,5,6
+gpus=4,5,6,7
 strategy=sqrt
 train_ratio=100
 logger=wandb
 consistent_warmup=1
 backend=Gloo
-bash roboverse_learn/algorithms/diffusion_policy/train_dp.sh roboverse_demo/demo_realworld/"${task_name}"/robot-franka "${task_name}"FrankaRealWorld 50 "${gpus}" "${num_epochs}" joint_pos joint_pos 0 1 1 "${config_name}" "${port}" ${train_ratio} ${strategy} ${seed} ${logger} ${consistent_warmup} ${backend}
+use_ee=0
+
+obs_space=joint_pos
+act_space=joint_pos
+if [ "${use_ee}" -eq 1 ]; then
+  obs_space=ee
+  act_space=ee
+fi
+
+bash roboverse_learn/algorithms/diffusion_policy/train_dp.sh roboverse_demo/demo_realworld/"${task_name}"/robot-franka "${task_name}"FrankaRealWorld 125 "${gpus}" "${num_epochs}" "${obs_space}" "${act_space}" 0 1 1 "${config_name}" "${port}" ${train_ratio} ${strategy} ${seed} ${logger} ${consistent_warmup} ${backend}
