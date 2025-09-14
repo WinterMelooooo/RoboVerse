@@ -43,7 +43,7 @@ ENV_POINT_CLOUD_CONFIG = {
         "min_bound": [
             -0.71,
             -1.75,
-            0.017,  # 0.00
+            0.022 #0.017,  # 0.00
         ],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
         "max_bound": [0.57, 0.5, 100],  # gt approxiamately [0.75, 2.45, 0.98]
         "num_points": 4096,
@@ -91,7 +91,23 @@ ENV_POINT_CLOUD_CONFIG = {
         "scale": np.array([1, 1, 1]),
         "offset": np.array([0, 0, 0]),
 
+    },
+    "ExtLibero100":{
+        "min_bound": [
+            -0.15,
+            -100,
+            -100,  # 0.00
+        ],  # gt approxiamately [-4.2, -2.5, -0.74] #0.0025
+        "max_bound": [100, 100, 100],  # gt approxiamately [0.75, 2.45, 0.98]
+        "num_points": 4096,
+        "point_sampling_method": "fps",
+        "cam_names": ["top"],
+        "transform": None,
+        "scale": np.array([1, 1, 1]),
+        "offset": np.array([0, 0, 0]),
+
     }
+
 }
 
 BBOX_OFFSET_DIC = {1: [0.0, 0.0, 0.0], 25: [8.0, -8.01, 0.0], 50: [14.3, -12.01, 0.0]}
@@ -147,7 +163,7 @@ class PntCloudGetter:
     fetch point cloud from mujoco and add it to obs
     """
 
-    def __init__(self, task_name, num_envs=1, use_point_crop=True):
+    def __init__(self, task_name, num_envs=1, use_point_crop=True, img_size=256):
         if num_envs not in BBOX_OFFSET_DIC.keys():
             raise NotImplementedError(
                 "The point cloud getter relies on bounding box, whose x,y boundaries will translate as num_envs change. You can either set your num_envs to one of [1,25,50], or you can verify the specific offset for your num_envs by setting DEBUG=True in pnt_cloud_getter.py and run eval.py"
@@ -202,7 +218,7 @@ class PntCloudGetter:
 
         # point cloud generator
         self.pc_generator = PointCloudGenerator(
-            cam_names=self.env_cfg[task_name]["cam_names"]
+            cam_names=self.env_cfg[task_name]["cam_names"], img_size=img_size
         )
         self.pc_transform = self.env_cfg[task_name].get("transform", None)
         self.pc_scale = self.env_cfg[task_name].get("scale", None)
@@ -238,7 +254,6 @@ class PntCloudGetter:
                     mask = np.all(point_cloud[:, :3] < self.max_bound, axis=1)
                     point_cloud = point_cloud[mask]
                 if self.additional_cropping_box is not None:
-                    # mask_out 表示「需要被排除」的点
                     mask_out = np.zeros(point_cloud.shape[0], dtype=bool)
                     for bbox in self.additional_cropping_box.values():
                         in_box = (
@@ -246,7 +261,6 @@ class PntCloudGetter:
                             & np.all(point_cloud[:, :3] <= bbox["max_bound"], axis=1)
                         )
                         mask_out |= in_box
-                    # 最终保留：在主边界内且不在任何额外裁剪箱内的点
                     point_cloud = point_cloud[~mask_out]
             # sampling to fixed number of points
             point_cloud = point_cloud_sampling(

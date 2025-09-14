@@ -10,12 +10,12 @@ import os
 def visualize_pointcloud(pointcloud, color:tuple=None):
     vis = Visualizer()
     vis.visualize_pointcloud(pointcloud, color=color)
-    
+
 class Visualizer:
     def __init__(self):
         self.app = Flask(__name__)
         self.pointclouds = []
-        
+
     def _generate_trace(self, pointcloud, color:tuple=None, size=5, opacity=0.7):
         x_coords = pointcloud[:, 0]
         y_coords = pointcloud[:, 1]
@@ -34,7 +34,7 @@ class Visualizer:
                 except: # maybe meet NaN error
                     # use simple cyan color
                     colors = ['rgb(0,255,255)' for _ in range(len(x_coords))]
-            else:    
+            else:
                 colors = ['rgb({},{},{})'.format(color[0], color[1], color[2]) for _ in range(len(x_coords))]
         else:
             colors = ['rgb({},{},{})'.format(int(r), int(g), int(b)) for r, g, b in pointcloud[:, 3:6]]
@@ -71,17 +71,17 @@ class Visualizer:
         else:
             colors = ['rgb({},{},{})'.format(int(r), int(g), int(b)) for r, g, b in pointcloud[:, 3:6]]
         return colors
-    
+
 
     def visualize_pointcloud(self, pointcloud, color:tuple=None):
         trace = self._generate_trace(pointcloud, color=color, size=6, opacity=1.0)
         layout = go.Layout(margin=dict(l=0, r=0, b=0, t=0))
         fig = go.Figure(data=[trace], layout=layout)
-        
+
         fig.update_layout(
-            
+
             scene=dict(
-                # aspectmode='cube', 
+                # aspectmode='cube',
                 xaxis=dict(
                     showbackground=False,  # 隐藏背景网格
                     showgrid=True,        # 隐藏网格
@@ -90,7 +90,7 @@ class Visualizer:
                     zerolinecolor='grey',  # 设置0线颜色为灰色
                     zeroline=False,        # 关闭0线
                     gridcolor='grey',      # 设置网格颜色为灰色
-                    
+
                 ),
                 yaxis=dict(
                     showbackground=False,
@@ -118,18 +118,18 @@ class Visualizer:
         @self.app.route('/')
         def index():
             return render_template_string('''<div>{{ div|safe }}</div>''', div=div)
-        
+
         self.app.run(debug=True, use_reloader=False)
 
     def visualize_pointcloud_and_save(self, pointcloud, color:tuple=None, save_path=None):
         trace = self._generate_trace(pointcloud, color=color, size=6, opacity=1.0)
         layout = go.Layout(margin=dict(l=0, r=0, b=0, t=0))
         fig = go.Figure(data=[trace], layout=layout)
-        
+
         fig.update_layout(
-            
+
             scene=dict(
-                # aspectmode='cube', 
+                # aspectmode='cube',
                 xaxis=dict(
                     showbackground=False,  # 隐藏背景网格
                     showgrid=True,        # 隐藏网格
@@ -138,7 +138,7 @@ class Visualizer:
                     zerolinecolor='grey',  # 设置0线颜色为灰色
                     zeroline=False,        # 关闭0线
                     gridcolor='grey',      # 设置网格颜色为灰色
-                    
+
                 ),
                 yaxis=dict(
                     showbackground=False,
@@ -163,7 +163,7 @@ class Visualizer:
         )
         # save
         fig.write_image(save_path, width=800, height=600)
-        
+
 
     def save_visualization_to_file(self, pointcloud, file_path, color:tuple=None):
         # visualize pointcloud and save as html
@@ -174,4 +174,3 @@ class Visualizer:
         with open(file_path, 'w') as file:
             file.write(fig_html)
         print(f"Visualization saved to {file_path}")
-    

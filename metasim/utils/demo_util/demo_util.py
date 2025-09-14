@@ -36,7 +36,7 @@ def get_traj(task: BaseTaskCfg, robot: BaseRobotCfg, handler: BaseSimHandler | N
                 return get_traj_v2(task, robot)
         else:
             raise FileNotFoundError(
-                "The trajectory file does not exist, please check the path or convert the trajectory file to v2 format"
+                f"The trajectory file {task.traj_filepath} does not exist, please check the path or convert the trajectory file to v2 format"
             )
     else:
         log.warning("Reading trajectory using v1 data format, which is deprecated")

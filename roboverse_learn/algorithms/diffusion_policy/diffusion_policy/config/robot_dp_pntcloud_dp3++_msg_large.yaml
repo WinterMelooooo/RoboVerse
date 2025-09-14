@@ -80,7 +80,6 @@ policy:
     L_nsample_list: # max number of sampled points in each local region
       - [16, 32]
       - [32, 64]
-    # 每条尺度下 MLP 通道（保持轻量）
     L_mlp_list:
       - [[16, 16, 32], [16, 16, 32]]
       - [[32, 32, 64], [32, 32, 64]]

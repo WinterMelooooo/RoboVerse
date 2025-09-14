@@ -3,7 +3,7 @@ from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
 
 robot_name = "franka"
 robot = get_robot(robot_name)
-task_name = "CloseBox"
+task_name = "DrawerOpen"
 task = get_task(task_name)
 
 

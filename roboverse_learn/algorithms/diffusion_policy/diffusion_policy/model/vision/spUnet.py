@@ -551,6 +551,7 @@ class SpUnetEncoder(ModuleAttrMixin):
         n_o = torch.tensor(n_o, dtype=torch.int32, device=o.device)
         if not self.use_mask or mask is None:
             idx = pointops.farthest_point_sampling(p, o, n_o)  # (m)
+
         else:
             if self.bg_ratio > 0.0:
                 fg_n_o, fg_count = (

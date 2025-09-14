@@ -14,7 +14,7 @@ from metasim.utils.demo_util import get_traj
 from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
 from metasim.utils.state import state_tensor_to_nested
 
-metadata_path = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_realworld/RealworldLiberoPickButter/robot-franka/demo_0000/metadata.json"
+metadata_path = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_rlbench/sweep_to_dustpan_of_size/robot_franka/demo_0002/metadata.json"
 
 sim = "isaaclab"
 robot = "franka"

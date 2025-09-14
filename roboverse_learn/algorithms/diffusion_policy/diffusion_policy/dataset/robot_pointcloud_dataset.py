@@ -404,6 +404,10 @@ def transform_point_cloud(point_cloud, robot_root_states, task_name, device=None
             if key.lower() in task_name.lower() or task_name.lower() in key.lower():
                 robot_root_state = robot_root_states[key]
                 break
+    if robot_root_state is None:
+        robot_root_state = torch.tensor(
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,], dtype=torch.float32,
+        )
     if device is not None:
         robot_root_state = robot_root_state.to(device)
         point_cloud = point_cloud.to(device)
