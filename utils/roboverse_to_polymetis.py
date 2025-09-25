@@ -14,9 +14,12 @@ def convert_single_demo(demo_dir, dest_dir):
         rgb_name = f"color_image_{frame_idx:04d}.png"
         iio.imwrite(os.path.join(dest_dir, rgb_name), rgb)
         joint_qpos = metadata["joint_qpos"][frame_idx]
+        joint_qpos_target = metadata["joint_qpos_target"][frame_idx]
         state = {
             "joint_pos": torch.tensor(joint_qpos[2:]),
-            "width": joint_qpos[0] + joint_qpos[1]
+            "joint_pos_target": torch.tensor(joint_qpos_target[2:]),
+            "width": joint_qpos[0] + joint_qpos[1],
+            "width_target": joint_qpos_target[0] + joint_qpos_target[1],
         }
         state_name = f"state_{frame_idx:04d}.pt"
         torch.save(state, os.path.join(dest_dir, state_name))

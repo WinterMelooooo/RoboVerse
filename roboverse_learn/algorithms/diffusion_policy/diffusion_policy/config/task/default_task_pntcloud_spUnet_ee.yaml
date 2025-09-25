@@ -10,7 +10,7 @@ shape_meta: &shape_meta
       shape: [8]
       type: low_dim
   action:
-    shape: [8]
+    shape: [7]
   goal:
 
 env_runner:

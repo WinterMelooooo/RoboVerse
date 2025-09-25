@@ -137,6 +137,13 @@ class PolicyRunner:
         ]
         return actions
 
+
+    def action_to_dict_ee(self, curr_action):
+        """
+        Converts action tensor to dict with joint keys
+        """
+        return curr_action
+
     def get_temporal_agg_action(self, action_chunk):
         """
         Implements temporal ensembline, as in Aloha ACT. Takes in a current prediction chunk and returns a single ensembled action
@@ -202,6 +209,29 @@ class PolicyRunner:
         )
 
         actions = self.action_to_dict(curr_action)
+        return actions
+
+
+    def get_action_ee(self, obs):
+        """Returns a single action to be directly executed. For action chunking policies it either uses an previsouly
+        predicted action chunk, or if it has exausted all of those actions, it queries the model for a new chunk and returns the first one
+        """
+        if len(self.action_cache) > 0:
+            curr_action = self.action_cache.pop(0)
+        else:
+            processed_obs = self.process_obs(obs)
+            action_chunk = self.predict_action(processed_obs)  # shape: (action_chunk_steps, num_envs, action_dim)
+            if self.policy_cfg.action_config.temporal_agg:
+                curr_action = self.get_temporal_agg_action(action_chunk)
+                curr_action = self.process_action([curr_action], obs)[0]
+            else:
+                qpos_action = self.process_action(action_chunk, obs)
+                self.action_cache = qpos_action
+                curr_action = self.action_cache.pop(0)
+
+        self.step += 1
+
+        actions = self.action_to_dict_ee(curr_action)
         return actions
 
     def predict_action(self, obs):

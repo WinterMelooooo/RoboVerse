@@ -14,7 +14,7 @@ shape_meta: &shape_meta
       shape: [4096, 3]
       type: point_cloud
   action:
-    shape: [8]
+    shape: [7]
 
 dataset:
   _target_: diffusion_policy.dataset.robot_multimodal_dataset.MultiModalDataset
@@ -24,7 +24,7 @@ dataset:
   pad_after: ${eval:'${n_action_steps}-1'}
   seed: 42
   val_ratio: 0.02
-  batch_size: 64
+  batch_size: 128
   max_train_episodes: null
   norm_pnt_cloud: False
   cotraining: False

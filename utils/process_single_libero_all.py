@@ -16,7 +16,7 @@ def transfer_demo(demo_dir):
     os.system(command)
 
 if __name__ == '__main__':
-    num_proc = 40
+    num_proc = 50
     demo_root_dir = "/scratch/current/ghr/szang/szang-workspace/SyntheticVLA-mini/experiments/robot/libero/datasets/libero_90_no_noops_dp/KITCHEN_SCENE10_close_the_top_drawer_of_the_cabinet"
     demo_dir_list = sorted(os.listdir(demo_root_dir))
     print(f"Transferring on demos: {demo_dir_list}")

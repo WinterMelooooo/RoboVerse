@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - task: default_task_resnet_pointnet_mutual_attention_ee
+  - task: default_task_resnet_pointnet_mutual_attention
 
 encoder_name: Fusion_ResNet18_PointNet_Mutual_Attention_Dropout
 
@@ -83,7 +83,7 @@ policy:
       mutual_attention: True
       post_fusion_func: sum
       norm_proj: False
-      use_residual: True
+      use_residual: False
       use_modality_encoding: True
       dropout: 0.2
 

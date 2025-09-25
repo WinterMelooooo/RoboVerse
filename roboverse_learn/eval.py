@@ -320,7 +320,6 @@ def main():
         ## Reset before first step
         tic = time.time()
         obs, extras = env.reset(states=init_states[demo_start_idx:demo_end_idx])
-
         policyRunner.reset()
         toc = time.time()
         log.trace(f"Time to reset: {toc - tic:.2f}s")

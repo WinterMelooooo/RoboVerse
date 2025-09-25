@@ -9,7 +9,7 @@ import multiprocessing
 from rich.progress import track
 
 
-demo_root = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_realworld/RealworldPour/robot-franka"
+demo_root = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_realworld/RealworldPickBottle/robot-franka"
 dest_root = "/home/ghr/yktang/RoboVerse/roboverse_demo/demo_polymetis"
 task_name = demo_root.split("/")[-2]
 dest_root = os.path.join(dest_root, task_name)
@@ -27,7 +27,7 @@ def transfer_demo(demo_idx):
     os.system(command)
 
 if __name__ == '__main__':
-    num_proc = 20
+    num_proc = 50
     demo_id_list = os.listdir(demo_root)
     demo_id_list = [int(demo_id.split("demo_")[-1]) for demo_id in demo_id_list if demo_id.startswith("demo_")]
     print(f"Transferring on demos: {demo_id_list}")

@@ -1,10 +1,10 @@
 export WANDB_API_KEY=263d7ff027d2057a793fb7f51783d43f5b6344cc
 export CUDA_VISIBLE_DEVICES=3
-task_name=Ext_Libero_100
+task_name=ExtLibero100_KITCHEN_SCENE10_close_the_top_drawer_of_the_cabinet
 num_envs=1
 demo_start_idx=0
 max_demo_idx=3000
-target_num_demos=95
+target_num_demos=47
 use_touch=0
 use_random_traj=0
 touch_flag=$([ "$use_touch" -eq 1 ] && echo "--use_touch")
